@@ -7,7 +7,7 @@ const fs = require('fs');
   const b = await chromium.launch({ executablePath: process.env.CHROME_PATH });
   const R = [], errs = [];
   const ok = (n, c, d) => R.push([n, !!c, d || '']);
-  const ctx = await b.newContext({ viewport: { width: 1366, height: 900 } });
+  const ctx = await b.newContext({ serviceWorkers: 'block', viewport: { width: 1366, height: 900 } });
   const p = await ctx.newPage();
   p.on('pageerror', e => errs.push(e.message));
   await p.goto(U + '/');

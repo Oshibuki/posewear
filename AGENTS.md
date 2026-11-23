@@ -18,4 +18,4 @@ Studio generation and provider branches live in `src/studio.js` (`genOnce`, `run
 
 ### Browser state and tests
 
-`localStorage` values are JSON-encoded by `LS`/`SV` in `src/app.js` and `src/studio.js`; tests injecting values must `JSON.stringify` them. `npm test` runs the full browser suite and requires `npm run serve` on port 8787; `npm run test:static` needs no server.
+`localStorage` values are JSON-encoded by `LS`/`SV` in `src/app.js` and `src/studio.js`; tests injecting values must `JSON.stringify` them. `npm test` runs the full browser suite and requires `npm run serve` on port 8787; `npm run test:static` needs no server. Browser tests load hashed assets from `dist/`; after changing `src/*.js` or `src/style.css`, run `npm run build:js` before `npm test` (a preflight check enforces this). Browser tests block Service Workers to avoid stale cached scripts.

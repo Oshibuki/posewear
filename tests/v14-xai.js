@@ -3,7 +3,7 @@
 const {chromium}=require('playwright');const path=require('path'),fs=require('fs'),FX=path.join(__dirname,'fixtures')+'/';
 const PNG=fs.readFileSync(FX+'mk1.png').toString('base64');
 (async()=>{const U=process.env.U||'http://localhost:8787';const b=await chromium.launch({executablePath:process.env.CHROME_PATH});const errs=[],R=[];let mode='ok',hits=[];
- const setup=async proto=>{const c=await b.newContext({viewport:{width:1366,height:900}});const p=await c.newPage();p.on('pageerror',e=>errs.push(e.message));
+ const setup=async proto=>{const c=await b.newContext({serviceWorkers:'block',viewport:{width:1366,height:900}});const p=await c.newPage();p.on('pageerror',e=>errs.push(e.message));
   await p.route(/\/api\/proxy/,async route=>{const req=route.request();if(req.method()=='OPTIONS')return route.fulfill({status:204});
    const target=req.headers()['x-target-url']||'';let body=null;try{body=JSON.parse(req.postData()||'null')}catch(e){}
    hits.push({target,body,ct:req.headers()['content-type']||''});

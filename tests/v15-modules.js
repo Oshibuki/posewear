@@ -3,7 +3,7 @@ const {chromium}=require('playwright');const path=require('path'),SS=path.join(_
 (async()=>{const U=process.env.U||'http://localhost:8787';const b=await chromium.launch({executablePath:process.env.CHROME_PATH});const errs=[],R=[];const S=SS+'v15-';const T=20000;
 const ok=(n,v,d)=>{R.push((v?'PASS ':'FAIL ')+n+(d?' :: '+d:''))};
 const W=(pg,f,a)=>pg.waitForFunction(f,a,{timeout:T}).then(()=>true).catch(()=>false);
-const ctx=await b.newContext({viewport:{width:1440,height:900}});const pg=await ctx.newPage();pg.on('pageerror',e=>errs.push(''+e));pg.on('console',m=>m.type()=='error'&&!/404/.test(m.text())&&errs.push(m.text()));
+const ctx=await b.newContext({serviceWorkers:'block',viewport:{width:1440,height:900}});const pg=await ctx.newPage();pg.on('pageerror',e=>errs.push(''+e));pg.on('console',m=>m.type()=='error'&&!/404/.test(m.text())&&errs.push(m.text()));
 await pg.goto(U+'/');ok('home grid',await W(pg,()=>document.querySelectorAll('#grid .card img.ld').length>=5));
 // ---- 各新栏目：数据条数 + 卡片渲染 + 导航计数 ----
 const EXP={expr:95,hair:122,dyn:57,scene:64,light:50,prop:32,furn:41}; // 历代/四库已剔除上游零视角空壳条目（历代 60−3、场景 68−4、光影 55−5、道具 36−4、家具 48−7）
