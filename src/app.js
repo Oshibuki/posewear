@@ -102,7 +102,7 @@ $('#trayClear').onclick=()=>{const s=st.sel;st.sel=[];SV('sel',[]);s.forEach(ref
 const TG_SLOT={portrait:'portrait',costume:'garment',anime:'garment',dyn:'garment',pose:'pose',depth:'pose',expr:'expr'};
 let tgSig='',tgBusy=false,tgRecs=[],tgUrls=[],tgCur=0;
 function tgGroups(){const g={portrait:[],garment:[],pose:[],expr:[]},extra=[];st.sel.forEach(k=>{const it=ITEMS[k];if(!it)return;const s=TG_SLOT[it.type];if(s)g[s].push(it);else extra.push(it)});return{g,extra}}
-async function tgSync(){const pv=$('#tgProv');if(pv)pv.textContent=window.WB&&WB._cfg.key?WB.provLabel():'未配置 API';if(!st.sel.length||!window.WB)return;const sig=st.sel.join(',');if(sig==tgSig)return;tgSig=sig;const{g,extra}=tgGroups();try{const base=await WB.setSel(g);const ex=extra.map(it=>prompt(it,st.tl)).join(st.tl=='en'?', ':'；');$('#tgPrompt').value=base+(ex?'\n'+(st.tl=='en'?'Additional: ':'补充：')+ex:'')}catch(e){}}
+async function tgSync(){const pv=$('#tgProv');if(pv)pv.textContent=window.WB&&(WB._cfg.key||WB._cfg.prov=='sdcpp')?WB.provLabel():'未配置 API';if(!st.sel.length||!window.WB)return;const sig=st.sel.join(',');if(sig==tgSig)return;tgSig=sig;const{g,extra}=tgGroups();try{const base=await WB.setSel(g);const ex=extra.map(it=>prompt(it,st.tl)).join(st.tl=='en'?', ':'；');$('#tgPrompt').value=base+(ex?'\n'+(st.tl=='en'?'Additional: ':'补充：')+ex:'')}catch(e){}}
 function tgStat(t){const s=$('#tgStat');if(!s)return;s.hidden=!t;if(t)s.textContent=t}
 function tgRender(){tgUrls.forEach(u=>URL.revokeObjectURL(u));tgUrls=tgRecs.map(r=>URL.createObjectURL(r.after));$('#tgRes').innerHTML=tgUrls.map((u,i)=>`<button data-tg="${i}" title="查看大图"><img src="${u}" alt="生成结果 ${i+1}"></button>`).join('')}
 $('#tgRes').onclick=e=>{const b=e.target.closest('[data-tg]');if(!b)return;tgCur=+b.dataset.tg;$('#tgViewImg').src=tgUrls[tgCur];$('#tgView').hidden=false};
@@ -113,7 +113,7 @@ $('#tgHist').onclick=()=>{tgClose();setTab('history')};
 $('#tgCfg').onclick=()=>window.WB&&WB.cfgOpen();
 $('#tgStudio').onclick=()=>setTab('studio');
 $('#tgStop').onclick=()=>window.WB&&WB.stop();
-$('#tgGo').onclick=async()=>{if(tgBusy)return;if(!window.WB)return;if(!WB._cfg.key){WB.cfgOpen();return}
+$('#tgGo').onclick=async()=>{if(tgBusy)return;if(!window.WB)return;if(!WB._cfg.key&&WB._cfg.prov!='sdcpp'){WB.cfgOpen();return}
  if(!st.sel.length)return toast('先从图库里选几项加入组合');await tgSync();tgBusy=true;const go=$('#tgGo');go.disabled=true;go.textContent='生成中…';$('#tgStop').hidden=false;tgStat('正在准备素材…');
  const pv=$('#tgPrompt').value.trim(),o={n:+$('#tgN').value||1,ar:$('#tgAR').value,onTick:(d,t)=>tgStat(`生成中… 已完成 ${d} / ${t}`)};if(pv)o.prompt=pv;
  try{const r=await WB.quick(o);if(r.got&&r.got.length){tgRecs=r.got;tgRender()}if(r.errs&&r.errs.length){const e=r.errs.find(x=>x.safe)||r.errs[0];tgStat(e.name=='AbortError'?'已取消':(e.safe?'被服务商的安全审核拦下了，换个服务商或服装再试':'生成失败：'+WB.nice(e).split('\n')[0]))}else if(r.got&&r.got.length)tgStat(`完成 ${r.got.length} 张，已存入生成记录`);else if(r.nokey)tgStat('请先配置 API')}
