@@ -16,6 +16,12 @@ Single-context layout: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `
 
 Studio generation and provider branches live in `src/studio.js` (`genOnce`, `run`). Tray quick generation lives in `src/app.js` (`tgSync`, `#tgGo`). See `CODING_STANDARDS.md` when adding a provider branch.
 
+Local sd.cpp model management (recipe catalog, loaded model, explicit recipe load) lives in `src/studio.js` (`sdNative`, `sdRead`, `sdLoad`, `sdRender`); the endpoint contract is `docs/sdcpp-api.md`.
+
+`src/studio.js` and `src/app.js` use a dense one-line style: anchor edits on a short unique substring instead of a reformatted multi-line block.
+
 ### Browser state and tests
 
 `localStorage` values are JSON-encoded by `LS`/`SV` in `src/app.js` and `src/studio.js`; tests injecting values must `JSON.stringify` them. `npm test` runs the full browser suite and requires `npm run serve` on port 8787; `npm run test:static` needs no server. Browser tests load hashed assets from `dist/`: after changing `src/*.js` or `src/style.css`, run `npm run build:js`; after changing `src/index.html`, run `npm run build:html` and commit `tests/fixtures/index-html.sha256`. The `npm test` preflight checks both hashed assets and `dist/index.html`; `npm run test:static` checks the committed index hash and the provider-string guard. Browser tests block Service Workers to avoid stale cached scripts.
+
+Wait on real state in browser tests (an option list, a rendered count), never on text a placeholder can satisfy. `npm run test:repeat` runs the browser suite three times to expose timing flakiness; run it before committing changes that touch rendering or async flows. CI runs `npm run test:static` only, because `dist/` is gitignored and the CI job has no built assets, so browser-suite regressions must be caught locally.

@@ -13,7 +13,7 @@ stable-diffusion.cpp's server (`sd-server`) listens on `127.0.0.1:1234` by defau
 
 The sd.cpp provider will be reached by a **direct browser connection** to a user-configured local base URL. The site proxy's private-network ban stays unchanged. No server-side route is added for sd.cpp.
 
-Image generation uses the OpenAI-compatible family (`/v1/images/edits` and `/v1/images/generations`), reusing the existing `openaiData()` response parser. Model selection and loading use the native `/sdcpp/v1/*` model-management endpoints, because the OpenAI family exposes only a single fixed model ID. A recipe is loaded only when the user explicitly confirms the selection, not when the dropdown value changes.
+Image generation uses the OpenAI-compatible family (`/v1/images/edits` and `/v1/images/generations`), reusing the existing `openaiData()` response parser. Model selection and loading use the native `/sdcpp/v1/*` model-management endpoints, because the OpenAI family exposes only a single fixed model ID. A recipe is loaded only when the user explicitly confirms the selection, not when the dropdown value changes. The endpoint contract for that native family is recorded in `docs/sdcpp-api.md`.
 
 ## Consequences
 
