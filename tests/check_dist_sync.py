@@ -3,7 +3,17 @@
 import pathlib, sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent / 'scripts'))
-from js_assets import ROOT, hashed_assets
+from js_assets import ROOT, hashed_assets, hashed_refs
+
+
+def source_name(name):
+    return name if '.' in name else name + '.json'
+
+
+def normalize_index(html):
+    for name, ref in hashed_refs().items():
+        html = html.replace('"' + ref + '"', '"' + source_name(name) + '"')
+    return html
 
 
 def main():
@@ -23,6 +33,10 @@ def main():
     if stale:
         print('FAIL dist is stale for: ' + ', '.join(stale))
         print('run npm run build:js after changing src/*.js or src/style.css')
+        return 1
+    src_index = ROOT / 'src' / 'index.html'
+    if not src_index.is_file() or normalize_index(html) != src_index.read_text():
+        print('FAIL dist/index.html is stale; run npm run build:html')
         return 1
     print(f'PASS dist hashed assets in sync ({len(assets)} files)')
     return 0

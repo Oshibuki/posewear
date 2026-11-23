@@ -6,9 +6,10 @@
   "scripts": {
     "build": "python3 build.py",
     "build:js": "python3 scripts/sync-js.py",
+    "build:html": "python3 scripts/sync-html.py",
     "serve": "python3 -m http.server 8787 -d dist",
     "test": "python3 tests/check_dist_sync.py && node tests/v12.js && node tests/v13.js && node tests/v14-xai.js && node tests/v15-modules.js && node tests/v16-proxy.mjs && node tests/v17-history.js && node tests/v18-quick.js && node tests/v19-sdcpp.js && python3 tests/check_csp.py dist",
-    "test:static": "for f in src/*.js tests/*.js tests/*.mjs; do node --check \"$f\" || exit 1; done && python3 -m py_compile build.py depthpack.py seo.py post.py costume_text.py scripts/*.py",
+    "test:static": "for f in src/*.js tests/*.js tests/*.mjs; do node --check \"$f\" || exit 1; done && python3 -m py_compile build.py depthpack.py seo.py post.py costume_text.py scripts/*.py && python3 tests/check_index_contract.py && python3 tests/check_provider_strings.py",
     "deploy": "wrangler pages deploy dist --project-name posewear"
   },
   "devDependencies": {
