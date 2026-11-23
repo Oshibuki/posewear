@@ -178,14 +178,14 @@ NAMES={'pose':('姿势参考图库','Pose Reference Library'),'costume':('服装
 CNT={'pose':len(SP),'costume':len(SC),'anime':len(SA),'portrait':len(SR),'tag':len(TAGS)}
 def hub(lang,kind):
   zh=lang=='zh';P='/en' if not zh else '';path=f'/{kind}/';nm=NAMES[kind][0 if zh else 1]
-  cs=[(s,z,e,len(L)) for s,z,e,L in CATS[kind]] if kind!='tag' else [(s,t['zh'],t['en'],len(t['L'])) for s,t in sorted(TAGS.items(),key=lambda x:-len(x[1]['L']))]
+  cs=[(s,z,e,len(L)) for s,z,e,L in CATS[kind] if L] if kind!='tag' else [(s,t['zh'],t['en'],len(t['L'])) for s,t in sorted(TAGS.items(),key=lambda x:-len(x[1]['L']))]
   desc={'pose':('按分类浏览 {n} 个姿势参考，每个姿势都有多个拍摄角度和中英文提示词。','Browse {n} pose references by category, each with several camera angles and prompts.'),
    'costume':('按季节和场合浏览 {n} 套服装穿搭参考，附中英文提示词，可在线 AI 试穿。','Browse {n} outfit references by season and occasion, with prompts and online AI try-on.'),
    'anime':('按季节和场合浏览 {n} 套动画风服装穿搭参考，附中英文提示词，可在线 AI 试穿。','Browse {n} anime-style outfit references by season and occasion, with prompts and online AI try-on.'),
    'portrait':('按类型和发长浏览 {n} 张人像脸模参考，CC0 1.0。','Browse {n} CC0 portrait face references by type and hair length.'),
    'tag':('按单品和颜色浏览穿搭参考，共 {n} 个标签。','Browse outfits by garment and colour: {n} tags.')}[kind][0 if zh else 1].format(n=CNT[kind])
   cr=[(LAB[lang]['home'],P+'/'),(LAB[lang][kind],None)]
-  first={s:L[0] for s,z,e,L in CATS[kind]} if kind!='tag' else {s:t['L'][0] for s,t in TAGS.items()}
+  first={s:L[0] for s,z,e,L in CATS[kind] if L} if kind!='tag' else {s:t['L'][0] for s,t in TAGS.items()}
   ki='costume' if kind=='tag' else kind
   li=''.join(f'<li><a href="{P}/{kind}/{s}/"><img src="{TU(thumb(ki,first[s]))}" alt="{E(z if zh else e)}" width="{TW[ki][0]}" height="{TW[ki][1]}" loading="lazy" decoding="async"><span>{E(z if zh else e)} · {n}</span></a></li>' for s,z,e,n in cs)
   extra='' if kind!='costume' else f'<p><a href="{P}/tag/">{"按单品和颜色浏览 →" if zh else "Browse by garment and colour →"}</a></p>'
@@ -244,7 +244,7 @@ def smx(L,img=True):
   return ''.join(out)+'</urlset>\n'
 SM['pages'].insert(0,(SITE+'/',TODAY,[(SITE+'/og.png','')]))
 for k,L in SM.items(): open(f'{D}/sitemap-{k}.xml','w').write(smx(L))
-ix='<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+''.join(f'<sitemap><loc>{SITE}/sitemap-{k}.xml</loc><lastmod>{max(x[1] for x in L)}</lastmod></sitemap>\n' for k,L in SM.items())+'</sitemapindex>\n'
+ix='<?xml version="1.0" encoding="UTF-8"?>\n<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'+''.join(f'<sitemap><loc>{SITE}/sitemap-{k}.xml</loc><lastmod>{max((x[1] for x in L),default=TODAY)}</lastmod></sitemap>\n' for k,L in SM.items())+'</sitemapindex>\n'
 open(f'{D}/sitemap_index.xml','w').write(ix);open(f'{D}/sitemap.xml','w').write(ix)
 open(f'{D}/robots.txt','w').write(f'User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /o/\n\nSitemap: {SITE}/sitemap_index.xml\n')
 open('urls.txt','w').write('\n'.join(u for L in SM.values() for u,_,_ in L)+'\n')

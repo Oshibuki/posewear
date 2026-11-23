@@ -30,6 +30,9 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
       R.push(['base prefilled local', /127\.0\.0\.1:1234/.test(await p.$eval('#cfBase', e => e.value)), await p.$eval('#cfBase', e => e.value)]);
       R.push(['key hidden', await p.$eval('#cfKey', e => { const l = e.closest('label'); return !l || l.hidden || getComputedStyle(l).display == 'none' }), '']);
       R.push(['proxy off and locked', await p.$eval('#cfProxy', e => !e.checked && e.disabled), '']);
+      await p.fill('#cfBase', 'http://127.0.0.1:1234/v1');
+      await p.click('#cfTest'); await p.waitForTimeout(400);
+      R.push(['test connection without key', !/请先填写 API Key/.test(await p.$eval('#cfMsg', e => e.textContent)), await p.$eval('#cfMsg', e => e.textContent)]);
     }
     await c.close() }
 
