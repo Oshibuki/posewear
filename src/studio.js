@@ -145,53 +145,67 @@ function cfgRead(){const prov=($('[name=prov]:checked')||{}).value||'openai';ret
 const cfgOpen=()=>{cfgFill();$('#cfg').hidden=false;document.body.style.overflow='hidden';if(isLocal(cfg.prov))sdRead()},cfgClose=()=>{$('#cfg').hidden=true;document.body.style.overflow=''};
 $('#wbCfg').onclick=cfgOpen;$('#wbCfg2').onclick=cfgOpen;$('#wbOnbGo').onclick=cfgOpen;$('#cfgX').onclick=cfgClose;$('#cfg').addEventListener('click',e=>{if(e.target.id=='cfg')cfgClose()});
 $('#cfRecipeRefresh').onclick=()=>sdRead();
-$('#cfRecipe').onchange=e=>{sdCatalog.pending=e.target.value;sdCatalog.picked=e.target.value!=sdLoaded().value;sdRender()};
+$('#cfRecipe').onchange=e=>{const v=e.target.value;sdCatalog.pending=v&&v!=sdLoaded().value?v:'';sdRender()};
 $('#cfRecipeLoad').onclick=()=>sdLoad();
+$('#cfRecipePending').onclick=e=>{if(e.target.closest('[data-sd-cancel]')){sdCatalog.pending='';sdRender()}};
 $$('[name=prov]').forEach(r=>r.onchange=()=>{const o=cfgRead();Object.assign(cfg,o,isLocal(o.prov)?{base:PROV[SDCPP].base,model:PROV[SDCPP].model,proxy:false}:{base:'',model:''});if(forcesProxy(o.prov))cfg.proxy=true;cfgFill();if(forcesProxy(o.prov))msg('火山方舟接口不允许浏览器跨域，已开启本站代理')});
 $('#cfProto').onchange=()=>{cfg.proto=$('#cfProto').value;$('#cfFieldW').hidden=cfg.proto!='edits'};
 $('#cfEye').onclick=()=>{const k=$('#cfKey');k.type=k.type=='password'?'text':'password';$('#cfEye').textContent=k.type=='password'?'显示':'隐藏'};
 $('#cfSave').onclick=()=>{const o=cfgRead();if(isCustom(o.prov)&&!o.base)return msg('自定义中转需要填写 Base URL',1);Object.assign(cfg,o);SV('wbCfg',cfg);render();cfgClose();toast('API 设置已保存在本机')};
 $('#cfClr').onclick=()=>{cfg.key='';$('#cfKey').value='';SV('wbCfg',cfg);render();msg('已从本机清除密钥')};
 function msg(t,bad){const m=$('#cfMsg');m.textContent=t;m.className='fine '+(bad?'bad':'good')}
+function msgAdd(t){const m=$('#cfMsg');if(m)m.textContent=(m.textContent||'')+t}
 // ---------- 本地模型发现与加载（sd.cpp 原生 API，与生图接口分开） ----------
 function nativeRoot(){const b=normBase(cfg.base)||PROV[cfg.prov].base;return b.replace(/\/v1(?:beta|alpha)?$/,'')}
-let sdCatalog={recipes:[],status:null,reading:false,pending:null,loading:false};
+let sdCatalog={recipes:[],status:null,reading:false,pending:null,loading:false,loadingId:null};
 async function sdNative(path,method,body,signal){const opt=method=='POST'?{method:'POST',signal,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body||{})}:{method:'GET',signal,headers:auth()};const r=await call(`${nativeRoot()}/sdcpp/v1/${path}`,opt);const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,method=='POST'?'load':'model');return j||{}}
-function sdLoaded(){const s=sdCatalog.status||{},cli=s.origin=='command_line'||!!(s.runtime_recipe&&s.runtime_recipe.id=='@command-line');
- if(cli)return{value:'@command-line',text:(s.runtime_recipe&&s.runtime_recipe.name||'Command line')+'（命令行预加载）'};
- if(s.recipe){const r=sdCatalog.recipes.find(x=>x.id==s.recipe);return{value:s.recipe,text:r&&r.name||s.recipe}}
- return{value:'',text:'未加载模型'}}
+// 服务器模型状态 → 界面文案（下拉框占位与状态提示的唯一来源）
+const SD_STATE={loading:{pick:'正在加载模型…',line:'本地模型正在加载…'},switching:{pick:'正在加载模型…',line:'模型切换中…'},error:{pick:'加载失败，未加载模型',line:'本地模型加载失败，当前没有可用模型'},empty:{pick:'未加载模型',line:'当前未加载模型'}};
+function sdLoaded(){const s=sdCatalog.status||{},cli=s.origin=='command_line'||!!(s.runtime_recipe&&s.runtime_recipe.id=='@command-line'),st=s.state||((s.recipe||cli)?'ready':'empty');
+ if(st!='ready'){const q=SD_STATE[st]||SD_STATE.empty;return{value:'',text:q.pick,state:st}}
+ if(cli)return{value:'@command-line',text:(s.runtime_recipe&&s.runtime_recipe.name||'Command line')+'（命令行预加载）',state:st};
+ if(s.recipe){const r=sdCatalog.recipes.find(x=>x.id==s.recipe);return{value:s.recipe,text:r&&r.name||s.recipe,state:st}}
+ return{value:'',text:SD_STATE.empty.pick,state:st}}
 function sdRecipeName(id){const r=sdCatalog.recipes.find(x=>x.id==id);return r&&r.name||id||''}
-function sdLoadedName(){const id=(sdCatalog.status||{}).recipe;return id?sdRecipeName(id):''}
+function sdLoadedName(){const l=sdLoaded();return l.value&&l.value!='@command-line'?sdRecipeName(l.value):''}
 function sdRender(){const sel=$('#cfRecipe');if(!sel)return;const loaded=sdLoaded(),opts=[];
  if(loaded.value=='@command-line'||(loaded.value&&!sdCatalog.recipes.some(r=>r.id==loaded.value))){const o=document.createElement('option');o.value=loaded.value||'@command-line';o.textContent=loaded.text+(loaded.value=='@command-line'?'':'（不在配方目录）');o.disabled=true;opts.push(o)}
  sdCatalog.recipes.forEach(r=>{if(r.id=='@command-line')return;const o=document.createElement('option');o.value=r.id;o.textContent=r.name||r.id;opts.push(o)});
+ if(!loaded.value){const o=document.createElement('option');o.value='';o.textContent=loaded.text;o.disabled=true;opts.unshift(o)}
  sel.replaceChildren(...opts);
- const want=sdCatalog.pending&&opts.some(o=>o.value==sdCatalog.pending)?sdCatalog.pending:loaded.value;
- if(opts.some(o=>o.value==want))sel.value=want;else if(opts.length)sel.selectedIndex=0;
- sdCatalog.pending=sel.value||'';
- if(sdCatalog.status)$('#cfLoaded').textContent='当前已加载：'+loaded.text;
- const cur=sdCatalog.pending,pend=cur&&cur!=loaded.value?cur:'';
- const pn=$('#cfRecipePending');if(pn)pn.textContent=sdCatalog.loading?'正在加载 '+sdRecipeName(cur)+'…':pend?'待加载：'+sdRecipeName(pend):'';
+ if(opts.some(o=>o.value==loaded.value))sel.value=loaded.value;else if(opts.length)sel.selectedIndex=0;
+ const le=$('#cfLoaded');if(le&&sdCatalog.status){const st=sdCatalog.loading&&sdCatalog.loadingId?'switching':loaded.state,q=SD_STATE[st]||SD_STATE.empty;
+  le.textContent=(st=='ready'?'当前已加载：'+loaded.text:q.line)+(loaded.state=='error'&&sdCatalog.status.error?'：'+String(sdCatalog.status.error).slice(0,120):'')}
+ const pend=sdCatalog.pending&&sdCatalog.pending!=loaded.value?sdCatalog.pending:'';
+ const pn=$('#cfRecipePending');if(pn)pn.innerHTML=sdCatalog.loading&&sdCatalog.loadingId?'正在加载 '+esc(sdRecipeName(sdCatalog.loadingId))+'…':pend?'待加载：'+esc(sdRecipeName(pend))+' <button class="sm ghost" data-sd-cancel="1">取消</button>':'';
  sel.disabled=sdCatalog.loading;
- const opt0=sel.selectedOptions&&sel.selectedOptions[0];
- const btn=$('#cfRecipeLoad');if(btn){btn.disabled=sdCatalog.loading||!cur||cur=='@command-line'||!!(opt0&&opt0.disabled);btn.textContent=sdCatalog.loading?'正在加载…':'加载此配方'}}
+ const btn=$('#cfRecipeLoad');if(btn){const can=!sdCatalog.loading&&!!pend&&sdCatalog.recipes.some(r=>r.id==pend);btn.disabled=!can;btn.textContent=sdCatalog.loading&&sdCatalog.loadingId?'正在加载…':can?'加载 '+sdRecipeName(pend):'加载此配方'}}
 async function sdRead(){if(sdCatalog.reading)return;sdCatalog.reading=true;const btn=$('#cfRecipeRefresh');if(btn)btn.disabled=true;msg('正在读取本地配方与模型状态…');
- try{const [cat,st]=await Promise.all([sdNative('recipes','GET'),sdNative('models/status','GET')]);sdCatalog.recipes=(cat&&cat.recipes||[]).filter(r=>r&&r.id);sdCatalog.status=st||{};
+ try{const [cat]=await Promise.all([sdNative('recipes','GET'),sdStatus()]);sdCatalog.recipes=(cat&&cat.recipes||[]).filter(r=>r&&r.id);
     const keep=sdCatalog.pending&&sdCatalog.pending!=sdLoaded().value&&sdCatalog.recipes.some(r=>r.id==sdCatalog.pending);
-  sdCatalog.pending=keep?sdCatalog.pending:sdLoaded().value;
+  sdCatalog.pending=keep?sdCatalog.pending:'';
   sdRender();msg('已读取本地配方与模型状态')}
  catch(e){msg(nice(e),1)}finally{sdCatalog.reading=false;if(btn)btn.disabled=sdCatalog.loading}}
+// 读一次服务器模型状态并写回本地状态（读目录与校正共用这一条路径）
+async function sdStatus(){const st=await sdNative('models/status','GET');if(st&&Object.keys(st).length)sdCatalog.status=st;else if(!sdCatalog.status)sdCatalog.status={};return sdCatalog.status}
+// 失败后重新读一次服务器状态：选择器只显示服务器实际在用的配方
+let sdSyncP=null;
+function sdSync(){if(sdSyncP)return sdSyncP;const before=sdLoaded().value;
+ const p=(async()=>{let ok=false;try{await sdStatus();ok=true}catch(e){}
+  finally{sdRender();if(before!=sdLoaded().value&&!W.busy)render()}return ok})();
+ sdSyncP=p.then(v=>{sdSyncP=null;return v});
+ return sdSyncP}
 async function sdLoad(){if(sdCatalog.loading)return;const id=sdCatalog.pending||'';if(!id||id=='@command-line')return;
- sdCatalog.loading=true;const rb=$('#cfRecipeRefresh');if(rb)rb.disabled=true;sdRender();msg('正在加载配方 '+sdRecipeName(id)+'…');let ok=false;
+ sdCatalog.loading=true;sdCatalog.loadingId=id;const rb=$('#cfRecipeRefresh');if(rb)rb.disabled=true;sdRender();msg('正在加载配方 '+sdRecipeName(id)+'…');let ok=false;
  const ac=new AbortController();let tmo=false;const tm=setTimeout(()=>{tmo=true;ac.abort()},window.__TMO||180000);
  try{const j=await sdNative('models/load','POST',{recipe:id},ac.signal);const st=Object.assign({},j||{});
   if(st.state=='ready'&&!st.recipe)st.recipe=id;
   if(st.state&&st.state!='ready')throw Error(st.error||('本地模型未就绪（'+st.state+'）'));
   if(!st.recipe)throw Error('加载响应里没有已加载配方信息');
-  sdCatalog.status=st;sdCatalog.pending=sdLoaded().value||id;ok=true}
- catch(e){if(tmo)msg('加载超时：等了 3 分钟还没有返回，模型可能仍在加载，请稍后点「刷新」查看状态。',1);else msg(nice(e),1)}
- finally{clearTimeout(tm);sdCatalog.loading=false;if(rb)rb.disabled=sdCatalog.reading;sdRender();if(ok){render();msg('已加载：'+sdRecipeName(sdLoaded().value))}}}
+  sdCatalog.status=st;sdCatalog.pending='';ok=true}
+ catch(e){if(tmo)msg('加载超时：等了 3 分钟还没有返回，模型可能仍在加载，请稍后点「刷新」查看状态。',1);else msg(nice(e),1);
+  sdCatalog.loadingId=null;sdCatalog.pending='';sdRender();const seen=await sdSync();if(!seen)msgAdd('（未能读取服务器当前模型状态，界面显示的是上次读到的结果）')}
+ finally{clearTimeout(tm);sdCatalog.loading=false;sdCatalog.loadingId=null;if(rb)rb.disabled=sdCatalog.reading;sdRender();if(ok){render();msg('已加载：'+sdRecipeName(sdLoaded().value))}}}
 $('#cfTest').onclick=async()=>{const o=cfgRead();if(!o.key&&needsKey(o.prov))return msg('请先填写 API Key',1);if(isCustom(o.prov)&&!o.base)return msg('请填写 Base URL',1);const old=Object.assign({},cfg);Object.assign(cfg,o);msg('正在连接…');
  try{const g=proto()=='gemini',url=g?`${root()}/models/${encodeURIComponent(modelOf())}`:`${root()}/models`;const r=await call(url,{method:'GET',headers:auth()});const j=await apiBody(r);
   if(!r.ok){if(forcesProxy(cfg.prov)&&r.status==404){if((r.headers.get('content-type')||'').includes('text/html')){const e=Error('');e.zh='本站代理未生效：/api/proxy 返回的是网站静态页面而不是接口响应，Seedream 暂时连不上，请稍后再试或联系站长';throw e}return msg('地址可达、密钥已被接受（方舟不提供模型列表接口，可直接生成测试）')}throw await apiErr(r,j)}
@@ -212,13 +226,13 @@ function safeErr(raw,j,rid){const t=String(raw||'')+' '+JSON.stringify(j||'');if
 async function apiBody(r){const t=await r.text();try{return JSON.parse(t)}catch(e){r._text=t;return null}}
 const LOAD_ERR={400:'配方配置无效，请刷新配方列表后再试',409:'本地模型正忙（还有生成任务没结束），请稍后再加载',422:'本地模型加载失败',429:'本地服务器繁忙，请稍后重试',500:'本地模型加载时服务器出错',503:'本地模型正在加载中，请稍后再试'};
 async function apiErr(r,j,scope){const textBody=r._text||'';const raw=(j&&(j.error&&(j.error.message||j.error.status||j.error)||j.message))||textBody||r.statusText||'';{const se=safeErr(typeof raw=='string'?raw:JSON.stringify(raw),j,(j&&j.error&&j.error.request_id)||r.headers.get('x-request-id'));if(se){se.status=r.status;return se}}
- if(isLocal(cfg.prov)){const t=String(typeof raw=='string'?raw:JSON.stringify(raw)).trim(),model=scope=='model',load=scope=='load',code=load&&j?j.code||(j.error&&j.error.code):'',cd=code?'（'+code+'）':'';let zh;
+ if(isLocal(cfg.prov)){const t=String(typeof raw=='string'?raw:JSON.stringify(raw)).trim(),model=scope=='model',load=scope=='load',code=(j&&(j.code||(j.error&&j.error.code)))||'',cd=code?'（'+code+'）':'';let zh;
   if(load)zh=(LOAD_ERR[r.status]||('本地模型加载失败（HTTP '+r.status+'）'))+cd+(t?'：'+t.slice(0,300):'');
   else if(r.status==429)zh=model?'本地服务器繁忙，请稍后重试':'本地生成队列已满，请稍后重试';
-  else if(r.status==503)zh=model?'本地模型信息暂不可用（可能正在加载），请稍等再试':'本地模型尚未就绪（可能正在加载），请稍等再重试';
+  else if(r.status==503)zh=model?'本地模型信息暂不可用（可能正在加载），请稍等再试':'本地模型尚未就绪（可能正在加载），请稍等再重试'+cd+(t?'：'+t.slice(0,300):'');
   else if(r.status>=500)zh=(model?'读取本地模型信息失败':'本地 sd.cpp 服务器报错')+(t?'：'+t.slice(0,300):'');
   else zh=(model?'读取本地模型信息失败':'本地生图失败')+'（HTTP '+r.status+'）'+(t?'：'+t.slice(0,300):'');
-  const e=Error(t);e.status=r.status;e.zh=zh;return e}
+  const e=Error(t);e.status=r.status;e.zh=zh;e.modelState=!model&&!load&&(r.status==503||/model_loading|model_not_loaded/.test(code));return e}
  const m={400:'请求参数有误：常见原因是模型不支持参考图、画幅尺寸不对或图片格式不支持，可换个模型或画幅再试',401:'密钥无效或已过期，请检查 API Key',403:'没有权限：密钥无此模型权限、账户未验证，或所在地区不受支持',404:'地址或模型不存在：请检查 Base URL 和模型名',413:'图片太大，请换一张更小的照片',429:'请求过于频繁或额度已用完，请稍后再试或检查账户余额',500:'服务商内部错误，请稍后重试',502:'网关错误（中转服务不可用）',503:'服务暂时不可用，请稍后重试',504:'服务商响应超时，请重试'}[r.status]||('请求失败（HTTP '+r.status+'）');
  let t=String(typeof raw=='string'?raw:JSON.stringify(raw));if(cfg.key)t=t.split(cfg.key).join('***');const bad=/API_KEY_INVALID|API key not valid|invalid api key|Incorrect API key|AuthenticationError|InvalidApiKey/i.test(t+' '+JSON.stringify(j||''));const ans=!bad&&t.match(/Argument not supported:\s*(\w+)/i);const e=Error(t);e.status=r.status;e.zh=(bad?'密钥无效或已过期，请检查 API Key':ans?`该服务商不支持 ${ans[1]} 参数：当前接口协议与它的规格对不上，请检查「接口协议」设置（xAI 请改选 xAI 协议）`:m)+(t?`\n服务商返回：${t.slice(0,300)}`:'');return e}
 function nice(e){if(e.name=='AbortError')return'已取消';if(e instanceof TypeError&&isLocal(cfg.prov)){const base=root();if(location.protocol=='https:'&&/^http:\/\//.test(base))return '本地 HTTP 服务器被浏览器拦截：HTTPS 页面不能访问 http:// 本地地址（混合内容）。请改用 http:// 打开 PoseWear（例如 http://localhost:8787），或为本地服务配置 HTTPS 后再试。';return '无法连接到本地 sd.cpp 服务器：请确认 sd-server 已启动并监听当前 Base URL 指向的地址（'+base+'；默认监听 127.0.0.1:1234）。'}if(e instanceof TypeError)return'无法连接到服务商：网络不通，或该地址不允许浏览器跨域访问（CORS）。\n可在 API 设置中开启「通过本站代理转发」。';return e.zh||e.message||String(e)}
@@ -268,7 +282,7 @@ async function run(opts={}){if(!cfg.key&&needsKey(cfg.prov)){toast('请先配置
   const custom=opts.prompt!=null?opts.prompt:(W.dirty?$('#wbPrompt').value.trim():null);stage(total>1?`模型正在绘制… 共 ${total} 张`:'模型正在绘制…');
   let q=0;const worker=async()=>{while(q<jobs.length&&!ac.signal.aborted){const set=jobs[q++];try{const imgs=[...pb,...gb,...await Promise.all(set.map(poseB)),...eb];const prompt0=custom&&(sets.length==1||opts.quick)?custom:compose(set),soft=neutralOn()&&!isAdultJob(set),prompt=soft?neutralize(prompt0):prompt0;W.lastSent=prompt;
     const jc=new AbortController(),onA=()=>jc.abort();ac.signal.addEventListener('abort',onA);let tmo=false;const tm=setTimeout(()=>{tmo=true;jc.abort()},window.__TMO||180000);let r;try{r=await genOnce(imgs,prompt,jc.signal,opts.ar)}catch(x){x.sent=prompt;if(tmo&&!ac.signal.aborted){const y=Error('timeout');y.zh='等了 3 分钟还没有返回。服务商可能正忙，稍后点「重试」。';throw y}throw x}finally{clearTimeout(tm);ac.signal.removeEventListener('abort',onA)}if(r.warn)warns.add(r.warn);const rec={t:Date.now()+Math.random(),prov:cfg.prov,model:modelOf(),prompt,orig:soft?prompt0:null,neutral:soft,mode:W.mode,label:set.map(p=>poseDesc(p,false).split('（')[0]).join(' / ')||'',before:pb[0]||null,after:r.blob};got.push(rec);await save(rec);W.results=got.slice();if(!opts.quick)show(got.length-1)}
-   catch(e){if(e.name=='AbortError')throw e;errs.push(e)}finally{done++;if(opts.onTick)opts.onTick(done,total)}}};
+   catch(e){if(e.name=='AbortError')throw e;if(e.modelState)sdSync();/*本地模型状态异常：重读服务器状态，别停在失效配方上*/errs.push(e)}finally{done++;if(opts.onTick)opts.onTick(done,total)}}};
   await Promise.all(Array.from({length:Math.min(2,jobs.length)},worker));
   if(got.length){toast(got.length>1?`完成 ${got.length} 张`:'生成完成');hist();window.HIS&&HIS.refresh()}if(errs.length&&!opts.quick){const e=errs.find(x=>x.safe)||errs[0];errBox(e,got.length?`${errs.length} 张生成失败`:'')}
   if(warns.size&&!opts.quick){$('#wbWarn').hidden=false;$('#wbWarn').textContent=[...warns].join(' ')}}

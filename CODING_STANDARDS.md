@@ -21,3 +21,7 @@ Calls to the sd.cpp native `/sdcpp/v1/*` endpoints (recipes, models/status, mode
 ## Never claim a model is active before the server says so
 
 The interface may only show a loaded model after a real status has been read (`sdCatalog.status`). A pending selection, a placeholder line, or a failed load must not render as "currently loaded". This is the interface half of the rule in `docs/adr/0001-sdcpp-local-direct.md`.
+
+## The recipe selector shows the model the server reports as loaded
+
+The recipe dropdown in the API settings (`#cfRecipe`) shows the recipe the server reports as loaded; a recipe the user has picked but not loaded is never presented as the model in effect. Such a pick is shown next to it as a pending label (`#cfRecipePending`, with a cancel action) and becomes the loaded model only after an explicit confirm. After a failed load, or after a generation failure that reports a model-state problem, the UI re-reads `GET /sdcpp/v1/models/status` and corrects the selection from that answer (`sdSync()` in `src/studio.js`); the failure reason stays on screen while the selection is corrected.

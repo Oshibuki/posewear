@@ -11,7 +11,7 @@ PoseWear 访问 stable-diffusion.cpp（`sd-server`）的**原生模型管理端�
 | `/sdcpp/v1/models/load` | POST | 加载指定配方 |
 | `/sdcpp/v1/models/refresh` | POST | 重新扫描配方与模型文件目录 |
 
-本仓库的调用方：`src/studio.js` 的 `sdNative()`（传输族）、`sdRead()`（读目录与状态）、`sdLoad()`（加载）。改动任一端点用法前先读 `CODING_STANDARDS.md` 的「sd.cpp 模型管理走单一传输族」一条。
+本仓库的调用方：`src/studio.js` 的 `sdNative()`（传输族）、`sdRead()`（读目录与状态）、`sdStatus()`（读一次模型状态）、`sdLoad()`（加载）、`sdSync()`（失败后重读状态并校正界面）。改动任一端点用法前先读 `CODING_STANDARDS.md` 的「sd.cpp 模型管理走单一传输族」一条。
 
 ## GET /sdcpp/v1/recipes
 
@@ -47,6 +47,8 @@ PoseWear 访问 stable-diffusion.cpp（`sd-server`）的**原生模型管理端�
 | 503 | `model_not_loaded` / `model_loading` | 没有已加载模型 / 正在加载或卸载 |
 
 UI 侧：这些状态码与错误码由 `src/studio.js` 的 `apiErr()` 在 **load 作用域**映射成用户文案（映射表 `LOAD_ERR`），分支不自己写文案。
+
+加载失败后 UI 会再读一次 `GET /sdcpp/v1/models/status`，把配方下拉框校正为服务器实际在用的配方（命令行预加载时是 `@command-line` 的只读表示）；失败原因与错误码留在设置面板里，校正不会覆盖它。生图请求返回 503（`model_not_loaded` / `model_loading`）时同样会重新读一次状态，避免界面停在已经失效的配方上。
 
 ## POST /sdcpp/v1/models/refresh
 

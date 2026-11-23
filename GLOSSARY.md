@@ -30,11 +30,15 @@ A trained diffusion weight file. A complete generator may need several model fil
 
 ## Recipe（配方）
 
-A named combination of model files and default generation settings. This is what a user selects when choosing which local model to generate with.
+A named combination of model files and default generation settings. This is what a user picks when choosing which local model to generate with; it becomes the model in effect only after it has been loaded.
 
 ## Loaded model（已加载模型）
 
-The model configuration currently held ready by a local generation server. Generation uses the loaded model; choosing a different recipe takes effect only after that recipe has been explicitly loaded.
+The model configuration currently held ready by a local generation server. Generation uses the loaded model; choosing a different recipe takes effect only after that recipe has been explicitly loaded. The interface may only present a loaded model after the server has reported it in its model status.
+
+## Pending recipe（待加载配方）
+
+A recipe the user has picked in the settings but not yet loaded. It is not in effect: generation still uses the loaded model. A pending recipe is shown next to the loaded model, never as the loaded model, and it is dropped once the recipe is loaded or the load fails.
 
 ## Generation（生图）
 
