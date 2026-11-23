@@ -35,10 +35,11 @@ await pg.waitForTimeout(400);
 const src1=await pg.evaluate(()=>document.querySelector('#lbImg').dataset.src);
 ok('灯箱切视角换图',src0!=src1&&/_back\.webp/.test(src1||''),src1);
 await pg.keyboard.press('Escape');await pg.evaluate(()=>{APP.st.f={};APP.apply()});
-// ---- 发型：热链 + 发色变体 ----
+// ---- 发型：图片可用（热链或本地镜像）+ 发色变体 ----
 await pg.click('[data-tab=hair]');await W(pg,()=>APP.st.tab=='hair'&&document.querySelector('#grid .card'));
-const hsrc=await pg.evaluate(()=>document.querySelector('#grid .card img').src);
-ok('发型图片热链原站',/^https:\/\/charadb-2fi\.pages\.dev\/thumb\//.test(hsrc),hsrc);
+await pg.waitForFunction(()=>{const i=document.querySelector('#grid .card img');return i&&i.complete&&i.naturalWidth>0},null,{timeout:10000}).catch(()=>{});
+const himg=await pg.evaluate(()=>{const i=document.querySelector('#grid .card img');return{src:i.src,loaded:i.complete&&i.naturalWidth>0}});
+ok('发型图片可用',himg.loaded&&(!/^https:/.test(himg.src)||/^https:\/\/charadb-2fi\.pages\.dev\/thumb\//.test(himg.src)),himg.src);
 ok('发型分组带 5 个发色变体',await pg.evaluate(()=>{const g=APP.DATA.hair.find(i=>i.angles);return g&&g.angles.length==5}));
 ok('发型单品条数',await pg.evaluate(()=>APP.DATA.hair.filter(i=>!i.angles).length==76));
 // ---- CharaDB 并入动画服装 ----

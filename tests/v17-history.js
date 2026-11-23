@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
 const path = require('path'), FX = path.join(__dirname, 'fixtures') + '/';
 const fs = require('fs');
 (async () => {
-  const U = process.env.U || 'http://localhost:8794';
+  const U = process.env.U || 'http://localhost:8787';
   const b = await chromium.launch({ executablePath: process.env.CHROME_PATH });
   const R = [], errs = [];
   const ok = (n, c, d) => R.push([n, !!c, d || '']);
