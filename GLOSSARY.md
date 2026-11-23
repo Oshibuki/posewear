@@ -10,6 +10,16 @@ A service that turns a prompt and reference images into a generated image. PoseW
 
 An image selected from a PoseWear gallery (portrait, garment, pose, expression) or uploaded by the user, used to condition a generation request. Reference images are forwarded to the provider together with the prompt.
 
+## Reference-image generation request（参考图生图请求）
+
+A generation request that carries one or more reference images together with a prompt to produce a new image. It is distinct from text-only generation and from editing an existing image.
+_Avoid_: 带图分支, image editing request
+
+## Text-only generation（纯提示词生图）
+
+A generation request that carries a prompt and no reference images.
+_Avoid_: prompt-only generation, 纯文字生图
+
 ## Prompt（提示词）
 
 The text describing the desired generated image. Composed from the selected reference items plus user input; may be rewritten by the "reduce false rejections" feature before being sent.

@@ -111,7 +111,11 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     const gen = hits.filter(h => /images\/edits/.test(h.url));
     R.push(['edits endpoint direct', gen.length >= 1, hits.map(h => h.url).join(' | ')]);
     R.push(['no proxy used', hits.every(h => !/api\/proxy/.test(h.url)) && gen.every(h => !h.headers['x-target-url']), '']);
-    R.push(['multipart multi-image', gen.some(h => /name="image\[\]"/.test(h.body) && (h.body.match(/name="image\[\]"/g) || []).length >= 2), gen[0] ? gen[0].body.slice(0, 200) : '']);
+    R.push(['no auth headers', gen.every(h => !h.headers.authorization && !h.headers['x-goog-api-key']), '']);
+    const sentRef = await p.evaluate(() => WB._W.lastSent || '');
+    R.push(['all references in standard field', gen.length === 1 && (gen[0].body.match(/name="image\[\]"/g) || []).length === 2 && !/name="image"/.test(gen[0].body), gen[0] ? gen[0].body.slice(0, 200) : '']);
+    R.push(['prompt unchanged in multipart', !!sentRef && gen[0].body.replace(/\r\n/g, '\n').includes(sentRef), sentRef.slice(0, 120)]);
+    R.push(['no status preflight', !hits.some(h => /\/sdcpp\/v1\//.test(h.url)), hits.map(h => h.url).join(' | ')]);
     await c.close() }
 
   // —— 无参考图：仅提示词走本地 generations JSON，结果展示并入档，不调用 edits
@@ -137,6 +141,18 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     R.push(['each requested image produced', gen2.length === 2 && bodies.length === 2 && hn2 >= 2, 'requests ' + gen2.length + ' / records ' + hn2]);
     await c.close() }
 
+  // —— 导入配置不能改写 sdcpp 的固定本地模型 ID
+  { const cfg = Object.assign({}, SD_CFG, { model: 'imported-evil-model' });
+    const { c, p } = await setup(cfg, '/#studio');
+    await p.evaluate(() => { localStorage.setItem('wbMode', JSON.stringify('gen')); localStorage.setItem('wbSel', JSON.stringify({ g: [], p: [], e: [] })) });
+    await p.reload(); await p.waitForFunction(() => window.WB && window.APP, null, { timeout: 15000 });
+    hits = []; reply = 'ok';
+    await p.click('.adv summary'); await p.fill('#wbPrompt', 'model id check'); await p.click('#wbGo');
+    await p.waitForFunction(() => document.querySelectorAll('#wbRes [data-ri]').length >= 1, null, { timeout: 20000 }).catch(() => {});
+    const b = hits.find(h => /images\/generations/.test(h.url)); let body = null; try { body = JSON.parse(b.body) } catch (e) {}
+    R.push(['imported model cannot override local id', !!body && body.model === 'sd-cpp-local', JSON.stringify(body)]);
+    await c.close() }
+
   // —— 本地生图失败：HTTP 边界模拟每种响应，断言用户可见的提示
   async function failCase(name, simulate, expected, opts = {}) {
     const { c, p } = await setup(opts.cfg || SD_CFG, '/#studio', opts.https);
@@ -150,6 +166,20 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     R.push([name, expected.test(text), text.slice(0, 300)]);
     if (opts.noResult) R.push([name + ' · no result shown', await p.$$eval('#wbRes [data-ri]', es => es.length) === 0, '']);
     await c.close() }
+  async function refFailCase(name, simulate, expected, checkHits) {
+    const { c, p } = await setup(SD_CFG, '/#costume');
+    await sel(p, 'costume'); await sel(p, 'pose');
+    hits = []; reply = simulate;
+    await p.click('#tgGo');
+    await p.waitForFunction(() => { const e = document.querySelector('#tgStat'); return e && /生成失败/.test(e.textContent) }, null, { timeout: 20000 }).catch(() => {});
+    const text = await p.$eval('#tgStat', e => e.textContent).catch(() => '');
+    R.push([name, expected.test(text), text.slice(0, 300)]);
+    if (checkHits) R.push([name + ' · request boundary', checkHits(hits), hits.map(h => h.method + ' ' + h.url).join(' | ')]);
+    await c.close() }
+  await refFailCase('edits failure never falls back', { status: 400, body: JSON.stringify({ error: { message: 'unsupported image field' } }) }, /生成失败/,
+    hs => hs.filter(h => /images\/edits/.test(h.url)).length === 1 && !hs.some(h => /images\/generations/.test(h.url)) && !hs.some(h => /name="image"/.test(h.body)));
+  await refFailCase('url-only response is not accepted', { data: [{ url: 'http://127.0.0.1:1234/only.png' }] }, /没有图片数据/,
+    hs => !hs.some(h => /api\/proxy|only\.png|images\/generations/.test(h.url)));
   await failCase('down server explains local address', 'down', /无法连接到本地 sd\.cpp 服务器[\s\S]*127\.0\.0\.1:1234/);
   await failCase('custom port shown in failure', 'down', /127\.0\.0\.1:5678/, { cfg: Object.assign({}, SD_CFG, { base: 'http://127.0.0.1:5678/v1' }) });
   await failCase('HTTPS mixed content explained', 'down', /HTTPS[\s\S]*混合内容|混合内容[\s\S]*HTTPS/, { https: true });
