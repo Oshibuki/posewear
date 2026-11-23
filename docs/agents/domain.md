@@ -8,6 +8,13 @@ How the engineering skills should consume this repo's domain documentation when 
 - **`GLOSSARY-MAP.md`** at the repo root if it exists: it points at one `GLOSSARY.md` per context. Read each one relevant to the topic.
 - **`docs/adr/`**: read ADRs that touch the area you're about to work in. In multi-context repos, also check `src/<context>/docs/adr/` for context-scoped decisions.
 
+## Before naming a concept or writing a rule
+
+Read the same material before you introduce vocabulary or a standard, not only before you explore code:
+
+- a term you put into `GLOSSARY.md`, an issue title, a test name or a proposal must match the glossary's wording and avoid the synonyms it bans;
+- a rule you add to `CODING_STANDARDS.md` must not contradict an ADR or a glossary term — state the invariant, not the mechanism that implements it.
+
 If any of these files don't exist, **proceed silently**. Don't flag their absence; don't suggest creating them upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) creates them lazily when terms or decisions actually get resolved.
 
 ## File structure

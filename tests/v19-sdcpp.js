@@ -1,4 +1,5 @@
 // v19: local stable-diffusion.cpp provider — direct browser connection, no proxy
+// mock knobs: modelStatus (loaded state) · statusReply (override the status) · loadReply (fail the load) · loadStatus (state after a failed load) · catalog / catalogReply (recipe list) · reply (generation response) · loadDelay (slow load) · hits (recorded requests)
 const { chromium } = require('playwright'); const path = require('path'), FX = path.join(__dirname, 'fixtures') + '/'; const fs = require('fs');
 (async () => {
   const U = process.env.U || 'http://localhost:8787'; const b = await chromium.launch({ executablePath: process.env.CHROME_PATH }); const R = [], errs = [];

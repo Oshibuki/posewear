@@ -15,6 +15,14 @@ Issues and specs for this repo live as GitHub issues. Use the `gh` CLI for all o
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: post the explanation with `gh issue comment <number> --body "..."`, then `gh issue close <number>`. On an already-closed issue, `gh issue close --comment` drops the comment and still exits 0.
 
+## Writing acceptance criteria
+
+Acceptance criteria describe **observable outcomes**, not the mechanics of the widget that produces them.
+
+- State what the user can see or what the request boundary shows: "the selector returns to the recipe the server reports as loaded", "the error message names the server's error code".
+- Leave the mechanism to the implementer: which control holds which value, how the state is stored, which endpoint is called. A criterion that pins the mechanism locks in an earlier ticket's design and forces the next ticket to rewrite it.
+- Derive each criterion from the parent spec's implementation decisions; if a criterion has no sentence to point at, it is a new decision and belongs in the parent spec, not in a child ticket.
+
 Infer the repo from `git remote -v`; `gh` does this automatically when run inside a clone.
 
 File issues only into the user's own repo. Never file into `mattpocock/skills` (the repo these skills come from) unless the user owns it. In a fork, `gh` can default to the upstream parent, so before the first `gh issue create` of a session, check the target with `gh repo view --json nameWithOwner` and confirm it with the user if it is not their repo.
