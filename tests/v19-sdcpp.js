@@ -8,7 +8,7 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
   const RECIPES = [{ id: 'flux1-dev', name: 'FLUX.1 dev' }, { id: 'sdxl-base', name: 'SDXL Base' }];
   const READY = { state: 'ready', recipe: 'flux1-dev', models: { diffusion_model: 'diffusion_models/flux1-dev.gguf' }, error: null, revision: 1 };
   const CLI = { state: 'ready', origin: 'command_line', recipe: null, runtime_recipe: { id: '@command-line', name: 'Command line' }, models: { model: 'checkpoints/cli.gguf' }, error: null, revision: 1 };
-  let catalog = { recipes: RECIPES, errors: [] }, modelStatus = READY, catalogReply = null;
+  let catalog = { recipes: RECIPES, errors: [] }, modelStatus = READY, catalogReply = null, loadReply = null, loadDelay = 0;
   const handler = async route => {
     const req = route.request(), u = req.url(), H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
     if (req.method() == 'OPTIONS') return route.fulfill({ status: 204, headers: H });
@@ -16,6 +16,13 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     if (u.includes('/api/proxy')) return route.fulfill({ status: 403, headers: H, body: '{"error":{"message":"proxy should not be used"}}' });
     if (/\/sdcpp\/v1\/recipes$/.test(u)) return route.fulfill({ status: catalogReply ? catalogReply.status : 200, headers: H, body: catalogReply && catalogReply.body !== undefined ? catalogReply.body : JSON.stringify(catalog) });
     if (/\/sdcpp\/v1\/models\/status$/.test(u)) return route.fulfill({ status: 200, headers: H, body: JSON.stringify(modelStatus) });
+    if (/\/sdcpp\/v1\/models\/load$/.test(u)) {
+      if (loadDelay) await new Promise(r => setTimeout(r, loadDelay));
+      if (loadReply) return route.fulfill({ status: loadReply.status || 422, headers: H, body: loadReply.body !== undefined ? loadReply.body : JSON.stringify({ error: 'Failed to initialize the selected model', code: 'model_load_failed' }) });
+      let lb = {}; try { lb = JSON.parse(req.postData() || '{}') } catch (e) {}
+      modelStatus = { state: 'ready', recipe: lb.recipe, models: { diffusion_model: 'diffusion_models/' + lb.recipe + '.gguf' }, error: null, revision: (modelStatus.revision || 1) + 1 };
+      return route.fulfill({ status: 200, headers: H, body: JSON.stringify(modelStatus) });
+    }
     if (reply == 'down') return route.abort('failed');
     if (reply && reply.status) return route.fulfill({ status: reply.status, headers: Object.assign({}, H, reply.headers || {}), body: reply.body !== undefined ? reply.body : JSON.stringify({ error: { message: 'local sd.cpp error' } }) });
     return route.fulfill({ status: 200, headers: H, body: JSON.stringify(reply && reply.data !== undefined ? { created: 1, data: reply.data } : { created: 1, data: [{ b64_json: PNG }] }) }) };
@@ -32,6 +39,8 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     await p.goto(https ? 'https://pw.test/#studio' : U + (hash || '/#studio')); await p.waitForFunction(() => window.WB && window.APP, null, { timeout: 15000 });
     return { c, p } }
   const sel = async (p, tab) => { await p.evaluate(t => APP.setTab(t), tab); await p.waitForSelector('.card [data-a="sel"]', { timeout: 15000 }); await p.waitForTimeout(300); await p.click('.card [data-a="sel"]'); await p.waitForTimeout(300) };
+  // 等真实状态（配方选项已渲染），不要等可能被占位文案满足的文本
+  const waitCatalog = p => p.waitForFunction(() => document.querySelectorAll('#cfRecipe option').length > 0, null, { timeout: 8000 }).catch(() => {});
 
   // —— 配置面板：sdcpp 是可选服务商，默认本地地址，隐藏密钥，禁用代理
   { const { c, p } = await setup(null);
@@ -53,7 +62,7 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
   { catalog = { recipes: RECIPES, errors: [] }; modelStatus = READY;
     const { c, p } = await setup(SD_CFG); hits = [];
     await p.click('#wbCfg');
-    await p.waitForFunction(() => { const e = document.querySelector('#cfLoaded'); return e && /当前已加载/.test(e.textContent) }, null, { timeout: 5000 }).catch(() => {});
+    await waitCatalog(p);
     const reads = hits.filter(h => h.method == 'GET' && /\/sdcpp\/v1\//.test(h.url));
     R.push(['settings reads recipes and status', reads.some(h => /\/sdcpp\/v1\/recipes$/.test(h.url)) && reads.some(h => /\/sdcpp\/v1\/models\/status$/.test(h.url)), hits.map(h => h.method + ' ' + h.url).join(' | ')]);
     const opts = await p.$$eval('#cfRecipe option', es => es.map(e => ({ value: e.value, text: e.textContent, disabled: e.disabled }))).catch(() => []);
@@ -68,7 +77,7 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
   { catalog = { recipes: RECIPES, errors: [] }; modelStatus = CLI;
     const { c, p } = await setup(SD_CFG); hits = [];
     await p.click('#wbCfg');
-    await p.waitForFunction(() => { const e = document.querySelector('#cfLoaded'); return e && /命令行/.test(e.textContent) }, null, { timeout: 5000 }).catch(() => {});
+    await waitCatalog(p);
     const text = await p.$eval('#cfLoaded', e => e.textContent).catch(() => ''), picked = await p.$eval('#cfRecipe', e => e.value).catch(() => '');
     R.push(['command-line model shown distinctly', /命令行/.test(text) && picked === '@command-line', text + ' / ' + picked]);
     const cliOpts = await p.$$eval('#cfRecipe option', es => es.filter(e => e.value === '@command-line').map(e => ({ text: e.textContent, disabled: e.disabled }))).catch(() => []);
@@ -88,7 +97,7 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
   { catalog = { recipes: RECIPES, errors: [] }; modelStatus = READY;
     const { c, p } = await setup(SD_CFG); hits = [];
     await p.click('#wbCfg');
-    await p.waitForFunction(() => { const e = document.querySelector('#cfLoaded'); return e && /当前已加载/.test(e.textContent) }, null, { timeout: 5000 }).catch(() => {});
+    await waitCatalog(p);
     const before = hits.filter(h => /\/sdcpp\/v1\//.test(h.url)).length;
     catalog = { recipes: RECIPES.concat([{ id: 'sd35', name: 'SD 3.5 Large' }]), errors: [] }; modelStatus = Object.assign({}, READY, { recipe: 'sd35' });
     await p.click('#cfRecipeRefresh', { timeout: 2000 }).catch(() => {});
@@ -98,6 +107,52 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     R.push(['refresh updates options and loaded state', (await p.$$eval('#cfRecipe option', es => es.length).catch(() => 0)) === 3 && /SD 3\.5 Large/.test(await p.$eval('#cfLoaded', e => e.textContent).catch(() => '')), '']);
     R.push(['refresh does not load a recipe', !hits.some(h => /\/sdcpp\/v1\/models\/load/.test(h.url)), hits.map(h => h.url).join(' | ')]);
     await c.close() }
+
+  // —— 显式确认加载配方：改下拉只改待选状态，确认才发一次加载请求
+  { catalog = { recipes: RECIPES, errors: [] }; modelStatus = READY; loadDelay = 800;
+    const { c, p } = await setup(SD_CFG); hits = [];
+    await p.click('#wbCfg');
+    await waitCatalog(p);
+    await p.selectOption('#cfRecipe', 'sdxl-base');
+    await p.waitForTimeout(300);
+    R.push(['selection change sends no load request', !hits.some(h => /\/sdcpp\/v1\/models\/load/.test(h.url)), hits.map(h => h.method + ' ' + h.url).join(' | ')]);
+    const pend = await p.$eval('#cfRecipePending', e => e.textContent).catch(() => '');
+    R.push(['pending selection is visible', /待加载/.test(pend) && /SDXL Base/.test(pend), pend]);
+    const before = await p.$eval('#cfLoaded', e => e.textContent).catch(() => '');
+    R.push(['loaded model unchanged before confirm', /FLUX\.1 dev/.test(before), before]);
+    await p.click('#cfRecipeLoad', { timeout: 2000 }).catch(() => {});
+    await p.waitForFunction(() => { const e = document.querySelector('#cfRecipePending'); return e && /正在加载/.test(e.textContent) }, null, { timeout: 3000 }).catch(() => {});
+    const during = await p.$eval('#cfRecipePending', e => e.textContent).catch(() => '');
+    R.push(['pending state visible while loading', /正在加载/.test(during), during]);
+    await p.waitForFunction(() => { const e = document.querySelector('#cfLoaded'); return e && /SDXL Base/.test(e.textContent) }, null, { timeout: 8000 }).catch(() => {});
+    const loads = hits.filter(h => /\/sdcpp\/v1\/models\/load$/.test(h.url));
+    R.push(['confirm sends exactly one load request', loads.length === 1, hits.map(h => h.method + ' ' + h.url).join(' | ')]);
+    let body = null; try { body = JSON.parse(loads[0].body) } catch (e) {}
+    R.push(['load uses the recipe default components', !!body && body.recipe === 'sdxl-base' && !('models' in body), JSON.stringify(body)]);
+    R.push(['load goes straight to the local server', loads.length === 1 && loads[0].method == 'POST' && !/api\/proxy/.test(loads[0].url) && !loads[0].headers.authorization, loads[0] ? loads[0].url : '']);
+    const active = await p.$eval('#cfLoaded', e => e.textContent).catch(() => '');
+    R.push(['loaded recipe becomes the loaded model', /当前已加载：SDXL Base/.test(active), active]);
+    const label = await p.$eval('#wbProv', e => e.textContent).catch(() => '');
+    R.push(['studio shows the loaded local model', /SDXL Base/.test(label), label]);
+    R.push(['no pending state left after load', !(await p.$eval('#cfRecipePending', e => e.textContent).catch(() => '')).trim(), await p.$eval('#cfRecipePending', e => e.textContent).catch(() => '')]);
+    loadDelay = 0; await c.close() }
+
+  // —— 加载失败：显示失败原因与错误码，且不谎称新配方已生效（选择器回滚留给 #7）
+  { catalog = { recipes: RECIPES, errors: [] }; modelStatus = READY;
+    loadReply = { status: 422, body: JSON.stringify({ error: 'Failed to initialize the selected model', code: 'model_load_failed' }) };
+    const { c, p } = await setup(SD_CFG); hits = [];
+    await p.click('#wbCfg');
+    await waitCatalog(p);
+    await p.selectOption('#cfRecipe', 'sdxl-base');
+    await p.click('#cfRecipeLoad', { timeout: 2000 }).catch(() => {});
+    await p.waitForFunction(() => { const e = document.querySelector('#cfMsg'); return e && /model_load_failed/.test(e.textContent) }, null, { timeout: 5000 }).catch(() => {});
+    const why = await p.$eval('#cfMsg', e => e.textContent).catch(() => '');
+    R.push(['failed load shows the reason and error code', /model_load_failed/.test(why) && /Failed to initialize/.test(why), why]);
+    const still = await p.$eval('#cfLoaded', e => e.textContent).catch(() => '');
+    R.push(['failed load keeps the previous loaded model', /FLUX\.1 dev/.test(still) && !/SDXL Base/.test(still), still]);
+    const loads = hits.filter(h => /\/sdcpp\/v1\/models\/load$/.test(h.url));
+    R.push(['failed load was requested once', loads.length === 1, loads.map(h => h.method + ' ' + h.url).join(' | ')]);
+    loadReply = null; await c.close() }
 
   // —— 有参考图：multipart 直连本地 edits，image[] 多图，无代理头，结果入档
   { const cfg = SD_CFG;

@@ -28,6 +28,8 @@ const normBase=b=>(b||'').trim().replace(/\/+$/,'');
 function root(){let b=normBase(cfg.base)||provInfo(cfg.prov).base,mode=rootMode(cfg.prov);if(mode=='v1beta')return/\/v1(beta|alpha)?$/.test(b)?b:b+'/v1beta';if(mode=='plain')return b;return/\/v\d+$/.test(b)?b:b+'/v1'}
 const modelOf=()=>isLocal(cfg.prov)?PROV[SDCPP].model:(cfg.model||'').trim()||provInfo(cfg.prov).model;
 const proto=()=>provInfo(cfg.prov).proto||cfg.proto;
+function provName(){return PROV[cfg.prov].name}
+function provLabel(){const ok=!needsKey(cfg.prov)||!!cfg.key;if(!ok)return'未配置 API';return isLocal(cfg.prov)?provName()+(sdLoadedName()?' · '+sdLoadedName():''):provName()+' · '+modelOf()}
 function loadImg(src){return new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>j(Error('图片读取失败'));i.src=src})}
 async function toJpeg(src,max=1536){const i=await loadImg(src);let w=i.naturalWidth,h=i.naturalHeight,s=Math.min(1,max/Math.max(w,h));w=Math.round(w*s);h=Math.round(h*s);
  const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(i,0,0,w,h);return new Promise(r=>c.toBlob(b=>r({blob:b,w,h}),'image/jpeg',.92))}
@@ -75,7 +77,7 @@ function render(){const G=isGen();$$('[data-mode]').forEach(b=>b.classList.toggl
  $('#wbBatch').hidden=W.poses.length<2;$$('[data-bm]').forEach(b=>b.classList.toggle('on',b.dataset.bm==W.bm));$('#wbAllAng').hidden=W.poses.length!=1||!A.ITEMS[(W.poses[0]||{}).k];
  $('#wbStyles').innerHTML=STYLES.map(s=>`<button class="chip ${W.style==s[0]?'on':''}" data-style="${s[0]}">${s[1]}</button>`).join('');$('#wbKeepBg').checked=W.keepBg;$('#wbKeepBg').closest('label').hidden=G||!hasPerson();
  $$('[data-pl]').forEach(b=>b.classList.toggle('on',b.dataset.pl==W.pl));
- const ok=!needsKey(cfg.prov)||!!cfg.key;$('#wbDot').className='dot'+(ok?' on':'');$('#wbProv').textContent=ok?PROV[cfg.prov].name+(isLocal(cfg.prov)?'':' · '+modelOf()):'未配置 API';$('#wbDot2').className='dot'+(ok?' on':'');$('#wbProv2').textContent=ok?PROV[cfg.prov].name:'未配置 API';$('#wbOnb').hidden=ok;
+ const ok=!needsKey(cfg.prov)||!!cfg.key;$('#wbDot').className='dot'+(ok?' on':'');$('#wbProv').textContent=provLabel();$('#wbDot2').className='dot'+(ok?' on':'');$('#wbProv2').textContent=ok?provName():'未配置 API';$('#wbOnb').hidden=ok;
  const dn=[G?true:hasPerson(),W.garments.length>0,W.poses.length>0,!!(W.style||$('#wbExtra').value)];$$('.step[data-s]').forEach(e=>e.classList.toggle('done',dn[e.dataset.s-1]));
  const jobs=nJobs();$('#wbGo').textContent='生成';$('#wbEst').textContent=`将生成 ${jobs} 张`;
  const noRefsOk=isLocal(cfg.prov)&&G;const miss=[!G&&!hasPerson()&&'人物照片',!noRefsOk&&!W.garments.length&&'服装',!ok&&'API 密钥'].filter(Boolean);$('#wbHint').textContent=miss.length?'还缺：'+miss.join('、'):'每张约半分钟';$('#wbHint').classList.toggle('miss',!!miss.length);const need=[!G&&!hasPerson()&&'上传人物照片',!noRefsOk&&!W.garments.length&&'选择服装'].filter(Boolean);if(!W.busy){$('#wbGo').disabled=!!need.length;$('#wbGo').title=need.length?'请先'+need.join('、'):'';if(need.length)$('#wbGo').textContent='请先'+need[0]}$$('.flow [data-f]').forEach(e=>e.classList.toggle('on',e.dataset.f<4?dn[e.dataset.f-1]&&(e.dataset.f!=3||W.poses.length>0):!need.length));
@@ -143,28 +145,53 @@ function cfgRead(){const prov=($('[name=prov]:checked')||{}).value||'openai';ret
 const cfgOpen=()=>{cfgFill();$('#cfg').hidden=false;document.body.style.overflow='hidden';if(isLocal(cfg.prov))sdRead()},cfgClose=()=>{$('#cfg').hidden=true;document.body.style.overflow=''};
 $('#wbCfg').onclick=cfgOpen;$('#wbCfg2').onclick=cfgOpen;$('#wbOnbGo').onclick=cfgOpen;$('#cfgX').onclick=cfgClose;$('#cfg').addEventListener('click',e=>{if(e.target.id=='cfg')cfgClose()});
 $('#cfRecipeRefresh').onclick=()=>sdRead();
+$('#cfRecipe').onchange=e=>{sdCatalog.pending=e.target.value;sdCatalog.picked=e.target.value!=sdLoaded().value;sdRender()};
+$('#cfRecipeLoad').onclick=()=>sdLoad();
 $$('[name=prov]').forEach(r=>r.onchange=()=>{const o=cfgRead();Object.assign(cfg,o,isLocal(o.prov)?{base:PROV[SDCPP].base,model:PROV[SDCPP].model,proxy:false}:{base:'',model:''});if(forcesProxy(o.prov))cfg.proxy=true;cfgFill();if(forcesProxy(o.prov))msg('火山方舟接口不允许浏览器跨域，已开启本站代理')});
 $('#cfProto').onchange=()=>{cfg.proto=$('#cfProto').value;$('#cfFieldW').hidden=cfg.proto!='edits'};
 $('#cfEye').onclick=()=>{const k=$('#cfKey');k.type=k.type=='password'?'text':'password';$('#cfEye').textContent=k.type=='password'?'显示':'隐藏'};
 $('#cfSave').onclick=()=>{const o=cfgRead();if(isCustom(o.prov)&&!o.base)return msg('自定义中转需要填写 Base URL',1);Object.assign(cfg,o);SV('wbCfg',cfg);render();cfgClose();toast('API 设置已保存在本机')};
 $('#cfClr').onclick=()=>{cfg.key='';$('#cfKey').value='';SV('wbCfg',cfg);render();msg('已从本机清除密钥')};
 function msg(t,bad){const m=$('#cfMsg');m.textContent=t;m.className='fine '+(bad?'bad':'good')}
-// ---------- 本地模型发现（sd.cpp 原生 API，与生图接口分开） ----------
+// ---------- 本地模型发现与加载（sd.cpp 原生 API，与生图接口分开） ----------
 function nativeRoot(){const b=normBase(cfg.base)||PROV[cfg.prov].base;return b.replace(/\/v1(?:beta|alpha)?$/,'')}
-let sdCatalog={recipes:[],status:null,reading:false};
-async function sdNative(path){const r=await call(`${nativeRoot()}/sdcpp/v1/${path}`,{method:'GET',headers:auth()});const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,'model');return j||{}}
+let sdCatalog={recipes:[],status:null,reading:false,pending:null,loading:false};
+async function sdNative(path,method,body,signal){const opt=method=='POST'?{method:'POST',signal,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body||{})}:{method:'GET',signal,headers:auth()};const r=await call(`${nativeRoot()}/sdcpp/v1/${path}`,opt);const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,method=='POST'?'load':'model');return j||{}}
 function sdLoaded(){const s=sdCatalog.status||{},cli=s.origin=='command_line'||!!(s.runtime_recipe&&s.runtime_recipe.id=='@command-line');
  if(cli)return{value:'@command-line',text:(s.runtime_recipe&&s.runtime_recipe.name||'Command line')+'（命令行预加载）'};
  if(s.recipe){const r=sdCatalog.recipes.find(x=>x.id==s.recipe);return{value:s.recipe,text:r&&r.name||s.recipe}}
  return{value:'',text:'未加载模型'}}
+function sdRecipeName(id){const r=sdCatalog.recipes.find(x=>x.id==id);return r&&r.name||id||''}
+function sdLoadedName(){const id=(sdCatalog.status||{}).recipe;return id?sdRecipeName(id):''}
 function sdRender(){const sel=$('#cfRecipe');if(!sel)return;const loaded=sdLoaded(),opts=[];
  if(loaded.value=='@command-line'||(loaded.value&&!sdCatalog.recipes.some(r=>r.id==loaded.value))){const o=document.createElement('option');o.value=loaded.value||'@command-line';o.textContent=loaded.text+(loaded.value=='@command-line'?'':'（不在配方目录）');o.disabled=true;opts.push(o)}
  sdCatalog.recipes.forEach(r=>{if(r.id=='@command-line')return;const o=document.createElement('option');o.value=r.id;o.textContent=r.name||r.id;opts.push(o)});
- sel.replaceChildren(...opts);const has=[...sel.options].some(o=>o.value==loaded.value);if(has)sel.value=loaded.value;else if(opts.length)sel.selectedIndex=0;
- $('#cfLoaded').textContent='当前已加载：'+loaded.text}
+ sel.replaceChildren(...opts);
+ const want=sdCatalog.pending&&opts.some(o=>o.value==sdCatalog.pending)?sdCatalog.pending:loaded.value;
+ if(opts.some(o=>o.value==want))sel.value=want;else if(opts.length)sel.selectedIndex=0;
+ sdCatalog.pending=sel.value||'';
+ if(sdCatalog.status)$('#cfLoaded').textContent='当前已加载：'+loaded.text;
+ const cur=sdCatalog.pending,pend=cur&&cur!=loaded.value?cur:'';
+ const pn=$('#cfRecipePending');if(pn)pn.textContent=sdCatalog.loading?'正在加载 '+sdRecipeName(cur)+'…':pend?'待加载：'+sdRecipeName(pend):'';
+ sel.disabled=sdCatalog.loading;
+ const opt0=sel.selectedOptions&&sel.selectedOptions[0];
+ const btn=$('#cfRecipeLoad');if(btn){btn.disabled=sdCatalog.loading||!cur||cur=='@command-line'||!!(opt0&&opt0.disabled);btn.textContent=sdCatalog.loading?'正在加载…':'加载此配方'}}
 async function sdRead(){if(sdCatalog.reading)return;sdCatalog.reading=true;const btn=$('#cfRecipeRefresh');if(btn)btn.disabled=true;msg('正在读取本地配方与模型状态…');
- try{const [cat,st]=await Promise.all([sdNative('recipes'),sdNative('models/status')]);sdCatalog.recipes=(cat&&cat.recipes||[]).filter(r=>r&&r.id);sdCatalog.status=st||{};sdRender();msg('已读取本地配方与模型状态')}
- catch(e){msg(nice(e),1)}finally{sdCatalog.reading=false;if(btn)btn.disabled=false}}
+ try{const [cat,st]=await Promise.all([sdNative('recipes','GET'),sdNative('models/status','GET')]);sdCatalog.recipes=(cat&&cat.recipes||[]).filter(r=>r&&r.id);sdCatalog.status=st||{};
+    const keep=sdCatalog.pending&&sdCatalog.pending!=sdLoaded().value&&sdCatalog.recipes.some(r=>r.id==sdCatalog.pending);
+  sdCatalog.pending=keep?sdCatalog.pending:sdLoaded().value;
+  sdRender();msg('已读取本地配方与模型状态')}
+ catch(e){msg(nice(e),1)}finally{sdCatalog.reading=false;if(btn)btn.disabled=sdCatalog.loading}}
+async function sdLoad(){if(sdCatalog.loading)return;const id=sdCatalog.pending||'';if(!id||id=='@command-line')return;
+ sdCatalog.loading=true;const rb=$('#cfRecipeRefresh');if(rb)rb.disabled=true;sdRender();msg('正在加载配方 '+sdRecipeName(id)+'…');let ok=false;
+ const ac=new AbortController();let tmo=false;const tm=setTimeout(()=>{tmo=true;ac.abort()},window.__TMO||180000);
+ try{const j=await sdNative('models/load','POST',{recipe:id},ac.signal);const st=Object.assign({},j||{});
+  if(st.state=='ready'&&!st.recipe)st.recipe=id;
+  if(st.state&&st.state!='ready')throw Error(st.error||('本地模型未就绪（'+st.state+'）'));
+  if(!st.recipe)throw Error('加载响应里没有已加载配方信息');
+  sdCatalog.status=st;sdCatalog.pending=sdLoaded().value||id;ok=true}
+ catch(e){if(tmo)msg('加载超时：等了 3 分钟还没有返回，模型可能仍在加载，请稍后点「刷新」查看状态。',1);else msg(nice(e),1)}
+ finally{clearTimeout(tm);sdCatalog.loading=false;if(rb)rb.disabled=sdCatalog.reading;sdRender();if(ok){render();msg('已加载：'+sdRecipeName(sdLoaded().value))}}}
 $('#cfTest').onclick=async()=>{const o=cfgRead();if(!o.key&&needsKey(o.prov))return msg('请先填写 API Key',1);if(isCustom(o.prov)&&!o.base)return msg('请填写 Base URL',1);const old=Object.assign({},cfg);Object.assign(cfg,o);msg('正在连接…');
  try{const g=proto()=='gemini',url=g?`${root()}/models/${encodeURIComponent(modelOf())}`:`${root()}/models`;const r=await call(url,{method:'GET',headers:auth()});const j=await apiBody(r);
   if(!r.ok){if(forcesProxy(cfg.prov)&&r.status==404){if((r.headers.get('content-type')||'').includes('text/html')){const e=Error('');e.zh='本站代理未生效：/api/proxy 返回的是网站静态页面而不是接口响应，Seedream 暂时连不上，请稍后再试或联系站长';throw e}return msg('地址可达、密钥已被接受（方舟不提供模型列表接口，可直接生成测试）')}throw await apiErr(r,j)}
@@ -183,9 +210,11 @@ function safeErr(raw,j,rid){const t=String(raw||'')+' '+JSON.stringify(j||'');if
  e.safe={cats:[...new Set(c)],where:/InputImage|input image/i.test(t)?'in':/OutputImage|output/i.test(t)?'out':'',rid:rid||(t.match(/req_[A-Za-z0-9]+/)||[])[0]||''};
  let r=String(raw||'').trim();if(cfg.key)r=r.split(cfg.key).join('***');e.raw=r||t.slice(0,600);e.zh='被服务商的安全审核拦下了';return e}
 async function apiBody(r){const t=await r.text();try{return JSON.parse(t)}catch(e){r._text=t;return null}}
+const LOAD_ERR={400:'配方配置无效，请刷新配方列表后再试',409:'本地模型正忙（还有生成任务没结束），请稍后再加载',422:'本地模型加载失败',429:'本地服务器繁忙，请稍后重试',500:'本地模型加载时服务器出错',503:'本地模型正在加载中，请稍后再试'};
 async function apiErr(r,j,scope){const textBody=r._text||'';const raw=(j&&(j.error&&(j.error.message||j.error.status||j.error)||j.message))||textBody||r.statusText||'';{const se=safeErr(typeof raw=='string'?raw:JSON.stringify(raw),j,(j&&j.error&&j.error.request_id)||r.headers.get('x-request-id'));if(se){se.status=r.status;return se}}
- if(isLocal(cfg.prov)){const t=String(typeof raw=='string'?raw:JSON.stringify(raw)).trim(),model=scope=='model';let zh;
-  if(r.status==429)zh=model?'本地服务器繁忙，请稍后重试':'本地生成队列已满，请稍后重试';
+ if(isLocal(cfg.prov)){const t=String(typeof raw=='string'?raw:JSON.stringify(raw)).trim(),model=scope=='model',load=scope=='load',code=load&&j?j.code||(j.error&&j.error.code):'',cd=code?'（'+code+'）':'';let zh;
+  if(load)zh=(LOAD_ERR[r.status]||('本地模型加载失败（HTTP '+r.status+'）'))+cd+(t?'：'+t.slice(0,300):'');
+  else if(r.status==429)zh=model?'本地服务器繁忙，请稍后重试':'本地生成队列已满，请稍后重试';
   else if(r.status==503)zh=model?'本地模型信息暂不可用（可能正在加载），请稍等再试':'本地模型尚未就绪（可能正在加载），请稍等再重试';
   else if(r.status>=500)zh=(model?'读取本地模型信息失败':'本地 sd.cpp 服务器报错')+(t?'：'+t.slice(0,300):'');
   else zh=(model?'读取本地模型信息失败':'本地生图失败')+'（HTTP '+r.status+'）'+(t?'：'+t.slice(0,300):'');
@@ -277,7 +306,7 @@ $('#wbHClr').onclick=async()=>{const all=W.hist||[];if(!all.length)return toast(
 let inited=false;async function init(){if(inited)return;inited=true;const gk=[].concat(g0.g||[]),pk=(g0.p||[]).filter(x=>Array.isArray(x)),ek=(g0.e||[]).filter(x=>Array.isArray(x));const need=[gk.length&&'costume',gk.some(k=>k[0]=='a')&&'anime',pk.length&&'pose',ek.length&&'expr'].filter(Boolean);if(need.length)await Promise.all(need.map(A.load)).catch(()=>{});
  if(!W.garments.length)W.garments=gk.filter(k=>A.ITEMS[k]).slice(0,1).map(k=>({kind:'lib',k}));if(!W.poses.length)W.poses=pk.filter(x=>A.ITEMS[x[0]]).slice(0,6).map(x=>({kind:'lib',k:x[0],ai:x[1]??A.ITEMS[x[0]].ai}));if(!W.exprs.length)W.exprs=ek.filter(x=>A.ITEMS[x[0]]).slice(0,1).map(x=>({kind:'lib',k:x[0],ai:x[1]??A.ITEMS[x[0]].ai}));hist()}
 async function setSel(sel){await init();W.garments=(sel.garment||[]).slice(0,2).map(it=>({kind:'lib',k:it.k}));W.poses=(sel.pose||[]).slice(0,6).map(it=>({kind:'lib',k:it.k,ai:it.ai}));W.exprs=(sel.expr||[]).slice(0,1).map(it=>({kind:'lib',k:it.k,ai:it.ai}));const pk=(sel.portrait||[])[0];if(pk){if(!(W.persons.length&&W.persons[0].k==pk.k)){W.persons=[];await addPortrait(pk)}}else W.persons=[];reprompt(true);render();return $('#wbPrompt').value}
-window.WB={async show(){await init();render()},async pick(it){await init();if(it.type=='pose'){if(!W.poses.some(p=>p.k==it.k)){if(W.poses.length>=6)W.poses.shift();W.poses.push({kind:'lib',k:it.k,ai:it.ai})}toast(`已加入姿势参考（${W.poses.length} 个）`)}else if(it.type=='portrait'){await addPortrait(it)}else if(it.type=='expr'){W.exprs=[{kind:'lib',k:it.k,ai:it.ai}];toast('已加入表情参考（只取神态）')}else{W.garments=[{kind:'lib',k:it.k}];toast('已选为试穿服装')}A.setTab('studio')},_W:W,_cfg:cfg,db:{tx,save,hist:()=>tx('readonly',s=>s.getAll()),del:t=>tx('readwrite',s=>s.delete(t)),clear:()=>tx('readwrite',s=>s.clear()),put:r=>tx('readwrite',s=>s.put(r)),refreshHist:hist},quick:o=>run(Object.assign({},o||{},{quick:true})),cfgOpen,nice,needsKey:()=>needsKey(cfg.prov),busy:()=>!!W.busy,stop:()=>{if(W.busy)W.busy.abort()},provLabel:()=>isLocal(cfg.prov)?PROV[SDCPP].name:cfg.key?PROV[cfg.prov].name+' · '+modelOf():'',setSel};
+window.WB={async show(){await init();render()},async pick(it){await init();if(it.type=='pose'){if(!W.poses.some(p=>p.k==it.k)){if(W.poses.length>=6)W.poses.shift();W.poses.push({kind:'lib',k:it.k,ai:it.ai})}toast(`已加入姿势参考（${W.poses.length} 个）`)}else if(it.type=='portrait'){await addPortrait(it)}else if(it.type=='expr'){W.exprs=[{kind:'lib',k:it.k,ai:it.ai}];toast('已加入表情参考（只取神态）')}else{W.garments=[{kind:'lib',k:it.k}];toast('已选为试穿服装')}A.setTab('studio')},_W:W,_cfg:cfg,db:{tx,save,hist:()=>tx('readonly',s=>s.getAll()),del:t=>tx('readwrite',s=>s.delete(t)),clear:()=>tx('readwrite',s=>s.clear()),put:r=>tx('readwrite',s=>s.put(r)),refreshHist:hist},quick:o=>run(Object.assign({},o||{},{quick:true})),cfgOpen,nice,needsKey:()=>needsKey(cfg.prov),busy:()=>!!W.busy,stop:()=>{if(W.busy)W.busy.abort()},provLabel:()=>provLabel(),setSel};
 if(document.body.classList.contains('studio'))WB.show();
 if(location.hash=='#studio'){const t0=()=>scrollTo(0,0);requestAnimationFrame(t0);addEventListener('load',()=>setTimeout(t0,0),{once:true})}
 addEventListener('keydown',e=>{if(e.key=='Escape'){if(!$('#pk').hidden)pkClose();else if(!$('#cfg').hidden)cfgClose()}});
