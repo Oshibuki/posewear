@@ -51,6 +51,28 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     R.push(['multipart multi-image', gen.some(h => /name="image\[\]"/.test(h.body) && (h.body.match(/name="image\[\]"/g) || []).length >= 2), gen[0] ? gen[0].body.slice(0, 200) : '']);
     await c.close() }
 
+  // —— 无参考图：仅提示词走本地 generations JSON，结果展示并入档，不调用 edits
+  { const cfg = { prov: 'sdcpp', base: 'http://127.0.0.1:1234/v1', key: '', model: 'sd-cpp-local', field: 'image[]', proto: 'edits', proxy: false };
+    const { c, p } = await setup(cfg, '/#studio');
+    await p.evaluate(() => { localStorage.setItem('wbMode', JSON.stringify('gen')); localStorage.setItem('wbSel', JSON.stringify({ g: [], p: [], e: [] })) });
+    await p.reload(); await p.waitForFunction(() => window.WB && window.APP, null, { timeout: 15000 });
+    hits = []; mode = 'ok';
+    const promptText = 'an adult model in a red coat, studio light';
+    R.push(['no references selected', await p.evaluate(() => ![].concat(WB._W.persons, WB._W.garments, WB._W.poses, WB._W.exprs).length), '']);
+    await p.click('.adv summary'); await p.fill('#wbPrompt', promptText); await p.selectOption('#wbAR', '9:16');
+    await p.click('#wbGo', { timeout: 4000 }).catch(() => {});
+    await p.waitForFunction(() => document.querySelector('#wbOutAct') && !document.querySelector('#wbOutAct').hidden, null, { timeout: 20000 }).catch(() => {});
+    R.push(['result shown in studio', await p.$eval('#wbOutAct', e => !e.hidden) && await p.$eval('#wbAfter', e => !!e.getAttribute('src')), '']);
+    const hn2 = await p.evaluate(async () => (await WB.db.hist()).length);
+    R.push(['saved to history', hn2 >= 1, 'records ' + hn2]);
+    const gen2 = hits.filter(h => /images\/generations/.test(h.url)), edits2 = hits.filter(h => /images\/edits/.test(h.url));
+    R.push(['generations endpoint direct', gen2.length >= 1 && gen2.every(h => !h.headers['x-target-url']), hits.map(h => h.url).join(' | ')]);
+    R.push(['edits endpoint not called', edits2.length === 0 && hits.every(h => !/api\/proxy/.test(h.url)), hits.map(h => h.url).join(' | ')]);
+    let body = null; try { body = JSON.parse(gen2[0] && gen2[0].body) } catch (e) {}
+    const sent = await p.evaluate(() => WB._W.lastSent || '');
+    R.push(['JSON request shape', !!body && body.model === 'sd-cpp-local' && body.n === 1 && body.size === '1024x1536' && !('image' in body) && body.prompt === sent && body.prompt.includes(promptText), JSON.stringify(body)]);
+    await c.close() }
+
   R.push(['no pageerror', !errs.length, errs.slice(0, 3).join(' | ')]);
   let f = 0; for (const [n, ok, d] of R) { console.log((ok ? 'PASS' : 'FAIL') + ' ' + n + (ok ? '' : ' :: ' + d)); if (!ok) f++ }
   console.log(`v19: ${R.length - f}/${R.length} passed`); await b.close(); process.exit(f ? 1 : 0);
