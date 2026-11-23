@@ -59,18 +59,19 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     hits = []; mode = 'ok';
     const promptText = 'an adult model in a red coat, studio light';
     R.push(['no references selected', await p.evaluate(() => ![].concat(WB._W.persons, WB._W.garments, WB._W.poses, WB._W.exprs).length), '']);
-    await p.click('.adv summary'); await p.fill('#wbPrompt', promptText); await p.selectOption('#wbAR', '9:16');
+    await p.click('.adv summary'); await p.fill('#wbPrompt', promptText); await p.selectOption('#wbAR', '9:16'); await p.selectOption('#wbN', '2');
     await p.click('#wbGo', { timeout: 4000 }).catch(() => {});
-    await p.waitForFunction(() => document.querySelector('#wbOutAct') && !document.querySelector('#wbOutAct').hidden, null, { timeout: 20000 }).catch(() => {});
-    R.push(['result shown in studio', await p.$eval('#wbOutAct', e => !e.hidden) && await p.$eval('#wbAfter', e => !!e.getAttribute('src')), '']);
+    await p.waitForFunction(() => document.querySelectorAll('#wbRes [data-ri]').length >= 2, null, { timeout: 20000 }).catch(() => {});
+    R.push(['results shown in studio', await p.$$eval('#wbRes [data-ri]', es => es.length) >= 2 && await p.$eval('#wbAfter', e => !!e.getAttribute('src')), '']);
     const hn2 = await p.evaluate(async () => (await WB.db.hist()).length);
-    R.push(['saved to history', hn2 >= 1, 'records ' + hn2]);
+    R.push(['saved to history', hn2 >= 2, 'records ' + hn2]);
     const gen2 = hits.filter(h => /images\/generations/.test(h.url)), edits2 = hits.filter(h => /images\/edits/.test(h.url));
-    R.push(['generations endpoint direct', gen2.length >= 1 && gen2.every(h => !h.headers['x-target-url']), hits.map(h => h.url).join(' | ')]);
+    R.push(['generations endpoint direct', gen2.length === 2 && gen2.every(h => h.method == 'POST' && !h.headers['x-target-url']), hits.map(h => h.url).join(' | ')]);
     R.push(['edits endpoint not called', edits2.length === 0 && hits.every(h => !/api\/proxy/.test(h.url)), hits.map(h => h.url).join(' | ')]);
-    let body = null; try { body = JSON.parse(gen2[0] && gen2[0].body) } catch (e) {}
+    let body = null, bodies = []; try { bodies = gen2.map(h => JSON.parse(h.body)); body = bodies[0] } catch (e) {}
     const sent = await p.evaluate(() => WB._W.lastSent || '');
-    R.push(['JSON request shape', !!body && body.model === 'sd-cpp-local' && body.n === 1 && body.size === '1024x1536' && !('image' in body) && body.prompt === sent && body.prompt.includes(promptText), JSON.stringify(body)]);
+    R.push(['JSON request shape', !!body && gen2.every(h => /application\/json/.test((h.headers['content-type'] || ''))) && bodies.every(b => b.n === 1 && b.prompt === sent) && body.model === 'sd-cpp-local' && body.size === '1024x1536' && !('image' in body) && body.prompt.includes(promptText), JSON.stringify(body)]);
+    R.push(['each requested image produced', gen2.length === 2 && bodies.length === 2 && hn2 >= 2, 'requests ' + gen2.length + ' / records ' + hn2]);
     await c.close() }
 
   R.push(['no pageerror', !errs.length, errs.slice(0, 3).join(' | ')]);
