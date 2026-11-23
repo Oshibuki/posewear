@@ -14,3 +14,28 @@ jobs:
           node-version: '20'
       - run: npm ci --ignore-scripts
       - run: npm run test:static
+
+  browser:
+    # The browser suites need a servable site. CI has no asset mirror (7.9 GB of
+    # images), so it is assembled from the committed fixture snapshot in
+    # tests/fixtures (see scripts/ci-assets.py). v12 and v15 assert that gallery
+    # images really load, which needs the mirror, so they stay local.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci --ignore-scripts
+      - run: npx playwright install --with-deps chromium
+      - name: assemble dist from the committed fixtures
+        run: |
+          python3 scripts/ci-assets.py
+          python3 scripts/sync-html.py --skip-manifest
+          python3 scripts/sync-js.py --skip-manifest
+      - run: npm run test:static
+      - name: browser suites
+        run: |
+          python3 -m http.server 8787 -d dist &
+          sleep 2
+          npm run test:ci
