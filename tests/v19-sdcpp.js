@@ -9,7 +9,11 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
   const RECIPES = [{ id: 'flux1-dev', name: 'FLUX.1 dev' }, { id: 'sdxl-base', name: 'SDXL Base' }];
   const READY = { state: 'ready', recipe: 'flux1-dev', models: { diffusion_model: 'diffusion_models/flux1-dev.gguf' }, error: null, revision: 1 };
   const CLI = { state: 'ready', origin: 'command_line', recipe: null, runtime_recipe: { id: '@command-line', name: 'Command line' }, models: { model: 'checkpoints/cli.gguf' }, error: null, revision: 1 };
-  const MODELS = { data: [{ id: 'Flux-2-Klein-4B-Q4_K_S' }, { id: 'sd-cpp-local' }] };
+  const MODELS = { data: [
+    { id: 'Flux-2-Klein-4B-Q4_K_S', labels: ['custom', 'image', 'edit'] },
+    { id: 'ChilloutMix', labels: ['custom', 'image'] },
+    { id: 'q4_k_xl', labels: ['custom', 'vision', 'chat', 'tool-calling'] },
+  ] };
   let catalog = { recipes: RECIPES, errors: [] }, modelStatus = READY, catalogReply = null, modelsReply = null, loadReply = null, loadDelay = 0, statusReply = null, loadStatus = null, refreshResult = {}, refreshReply = null, nativeHtml = false;
   const handler = async route => {
     const req = route.request(), u = req.url(), H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
@@ -94,11 +98,12 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     const { c, p } = await setup(SD_CFG); hits = [];
     await p.click('#wbCfg');
     await waitCatalog(p); await waitModels(p);
-    const opts = await p.$$eval('#cfModels option', es => es.map(e => e.value)).catch(() => []);
+    const opts = await p.$$eval('#cfModelSel option', es => es.map(e => e.value)).catch(() => []);
     R.push(['model catalog is read from the OpenAI family', hits.some(h => h.method == 'GET' && /\/v1\/models$/.test(h.url)), hits.map(h => h.method + ' ' + h.url).join(' | ')]);
-    R.push(['model options come from the server', opts.length === MODELS.data.length && MODELS.data.every((m, i) => opts[i] === m.id), JSON.stringify(opts)]);
-    R.push(['model input is selectable', await p.$eval('#cfModel', e => !e.disabled), '']);
-    await p.fill('#cfModel', 'Flux-2-Klein-4B-Q4_K_S');
+    const imageIds = MODELS.data.filter(m => (m.labels || []).includes('image')).map(m => m.id);
+    R.push(['model options include only image models', opts.length === imageIds.length && imageIds.every((id, i) => opts[i] === id) && !opts.includes('q4_k_xl'), JSON.stringify(opts)]);
+    R.push(['model dropdown is selectable', await p.$eval('#cfModelSel', e => !e.disabled && !e.hidden), '']);
+    await p.selectOption('#cfModelSel', 'Flux-2-Klein-4B-Q4_K_S');
     await p.click('#cfSave');
     await c.close() }
 
@@ -110,9 +115,10 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     await waitModels(p);
     await p.waitForFunction(() => { const e = document.querySelector('#cfSdW'); return e && e.hidden }, null, { timeout: 5000 }).catch(() => {});
     R.push(['non-native local server hides sd.cpp recipe UI', await p.$eval('#cfSdW', e => e.hidden), '']);
-    const opts = await p.$$eval('#cfModels option', es => es.map(e => e.value)).catch(() => []);
-    R.push(['non-native local server still lists OpenAI models', opts.length === MODELS.data.length && MODELS.data.every((m, i) => opts[i] === m.id), JSON.stringify(opts)]);
-    R.push(['model selection falls back to a listed model', (await p.$eval('#cfModel', e => e.value).catch(() => '')) === 'Flux-2-Klein-4B-Q4_K_S', await p.$eval('#cfModel', e => e.value).catch(() => '')]);
+    const opts = await p.$$eval('#cfModelSel option', es => es.map(e => e.value)).catch(() => []);
+    const imageIds = MODELS.data.filter(m => (m.labels || []).includes('image')).map(m => m.id);
+    R.push(['non-native local server still lists image models', opts.length === imageIds.length && imageIds.every((id, i) => opts[i] === id) && !opts.includes('q4_k_xl'), JSON.stringify(opts)]);
+    R.push(['model selection falls back to a listed model', (await p.$eval('#cfModelSel', e => e.value).catch(() => '')) === 'Flux-2-Klein-4B-Q4_K_S', await p.$eval('#cfModelSel', e => e.value).catch(() => '')]);
     R.push(['unsupported native refresh is not called', !hits.some(h => /\/sdcpp\/v1\/models\/refresh$/.test(h.url)), hits.map(h => h.method + ' ' + h.url).join(' | ')]);
     nativeHtml = false; await c.close() }
 
@@ -124,7 +130,7 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     await p.waitForFunction(() => { const e = document.querySelector('#cfMsg'); return e && /读取本地模型/.test(e.textContent) }, null, { timeout: 5000 }).catch(() => {});
     const text = await p.$eval('#cfMsg', e => e.textContent).catch(() => '');
     R.push(['model catalog failure is explained', /读取本地模型/.test(text) && /model list unavailable/.test(text), text]);
-    R.push(['model catalog failure keeps the documented fallback', (await p.$eval('#cfModel', e => e.value).catch(() => '')) === '' , await p.$eval('#cfModel', e => e.value).catch(() => '')]);
+    R.push(['model catalog failure keeps the documented fallback', (await p.$eval('#cfModelSel', e => e.value).catch(() => '')) === '' , await p.$eval('#cfModelSel', e => e.value).catch(() => '')]);
     modelsReply = null; await c.close() }
 
   // —— 目录读取失败：报告为读取模型信息失败，而不是生图失败
@@ -340,7 +346,7 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     await p.reload(); await p.waitForFunction(() => window.WB && window.APP, null, { timeout: 15000 });
     await p.click('#wbCfg');
     await waitCatalog(p); await waitModels(p);
-    await p.fill('#cfModel', 'Flux-2-Klein-4B-Q4_K_S');
+    await p.selectOption('#cfModelSel', 'Flux-2-Klein-4B-Q4_K_S');
     await p.click('#cfSave');
     hits = []; reply = 'ok';
     await p.click('.adv summary'); await p.fill('#wbPrompt', 'model id check'); await p.click('#wbGo');
