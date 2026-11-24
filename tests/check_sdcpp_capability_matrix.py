@@ -10,6 +10,8 @@ import pathlib, sys
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MATRIX_HEADING = '## 参考图能力矩阵（生成端点）'
 CONTRACT_FACTS = [
+    '本矩阵描述 `/v1/images/edits` 生成请求的上游模型能力',
+    '不属于原生模型管理端点',
     '非穷尽清单',
     '2026-11-24',
     '6b3edaaf',

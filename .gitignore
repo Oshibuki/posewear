@@ -19,7 +19,3 @@ indexnow.key
 urls.txt
 .indexnow-state.json
 .codebuddy/*
-tests/check_readme_contract.py
-tests/check_sdcpp_capability_matrix.py
-docs/plans/2026-11-24-sdcpp-reference-image-capability-matrix-design.md
-

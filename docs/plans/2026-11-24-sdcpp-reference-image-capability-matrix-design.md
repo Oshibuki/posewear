@@ -51,6 +51,8 @@ ADR-0002 Consequences 追加一条：
 
 链接相对路径以各 README 所在仓库根目录为准；实施时按现有 README 链接风格校准。
 
+2026-11-24 实施后补充：三语 README 的风险提示已并入 IP-Adapter / ControlNet / SD1.5 口径，以上三句草案是实施前版本、已被取代，最新措辞以三语 README 为准。
+
 ## 门禁与验证
 
 - `tests/check_readme_contract.py`：给 `DocSpec` 增加 `capability` 字段，三语各自列出风险提示必备词与 `docs/sdcpp-api.md` 链接；在现有 provider 段落检查中一并提出缺失项。

@@ -62,7 +62,9 @@ PoseWear 的「刷新」按钮 = **先 POST 重扫，成功后才并发 GET `/re
 
 PoseWear 客户端严格发送参考图且不做字段/端点回退（见 ADR-0002）。下表描述上游服务端是否采用这些图像；两者不是同一层。请求已发出 ≠ 参考图已生效。
 
-非穷尽清单，核对自 stable-diffusion.cpp 固定 commit `6b3edaaf32cc19e5bb2d819c788bd557eddc8eba` 的 `docs/`，核对日期 2026-11-24；新增模型查对应上游 docs。
+本矩阵描述 `/v1/images/edits` 生成请求的上游模型能力，不属于原生模型管理端点。
+
+非穷尽清单，核对自 stable-diffusion.cpp 固定 commit `6b3edaaf32cc19e5bb2d819c788bd557eddc8eba` 的上游仓库文件（`docs/`、`README.md`、`src/model/diffusion/control.hpp`、`examples/server/api.md`，明细见「来源与核对」），核对日期 2026-11-24；新增模型查对应上游 docs。
 
 本项目以 IP-Adapter 控制人物外观，以 ControlNet 控制人物姿态，针对 SD1.5 等级的模型。下表按上游固定 commit `6b3edaaf32cc19e5bb2d819c788bd557eddc8eba` 核对两类技术在各模型族上的支持程度；判定标准是「上游是否给出可核验的声明、示例或代码分支」，而不是模型族名称是否顺带出现。
 
