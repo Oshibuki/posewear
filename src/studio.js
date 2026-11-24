@@ -144,7 +144,7 @@ function cfgFill(){$$('[name=prov]').forEach(r=>r.checked=r.value==cfg.prov);con
 function cfgRead(){const prov=($('[name=prov]:checked')||{}).value||'openai';return{prov,base:$('#cfBase').value.trim(),key:$('#cfKey').value.trim(),model:$('#cfModel').value.trim(),field:$('#cfField').value,proto:$('#cfProto').value,proxy:proxyAllowed(prov)?$('#cfProxy').checked:false}}
 const cfgOpen=()=>{cfgFill();$('#cfg').hidden=false;document.body.style.overflow='hidden';if(isLocal(cfg.prov))sdRead()},cfgClose=()=>{$('#cfg').hidden=true;document.body.style.overflow=''};
 $('#wbCfg').onclick=cfgOpen;$('#wbCfg2').onclick=cfgOpen;$('#wbOnbGo').onclick=cfgOpen;$('#cfgX').onclick=cfgClose;$('#cfg').addEventListener('click',e=>{if(e.target.id=='cfg')cfgClose()});
-$('#cfRecipeRefresh').onclick=()=>sdRead();
+$('#cfRecipeRefresh').onclick=()=>sdRefresh();
 $('#cfRecipe').onchange=e=>{const v=e.target.value;sdCatalog.pending=v&&v!=sdLoaded().value?v:'';sdRender()};
 $('#cfRecipeLoad').onclick=()=>sdLoad();
 $('#cfRecipePending').onclick=e=>{if(e.target.closest('[data-sd-cancel]')){sdCatalog.pending='';sdRender()}};
@@ -154,11 +154,11 @@ $('#cfEye').onclick=()=>{const k=$('#cfKey');k.type=k.type=='password'?'text':'p
 $('#cfSave').onclick=()=>{const o=cfgRead();if(isCustom(o.prov)&&!o.base)return msg('自定义中转需要填写 Base URL',1);Object.assign(cfg,o);SV('wbCfg',cfg);render();cfgClose();toast('API 设置已保存在本机')};
 $('#cfClr').onclick=()=>{cfg.key='';$('#cfKey').value='';SV('wbCfg',cfg);render();msg('已从本机清除密钥')};
 function msg(t,bad){const m=$('#cfMsg');m.textContent=t;m.className='fine '+(bad?'bad':'good')}
-function msgAdd(t){const m=$('#cfMsg');if(m)m.textContent=(m.textContent||'')+t}
+function msgAdd(t,bad){const m=$('#cfMsg');if(m){m.textContent=(m.textContent||'')+(m.textContent?'；':'')+t;if(bad)m.className='fine bad'}}
 // ---------- 本地模型发现与加载（sd.cpp 原生 API，与生图接口分开） ----------
 function nativeRoot(){const b=normBase(cfg.base)||PROV[cfg.prov].base;return b.replace(/\/v1(?:beta|alpha)?$/,'')}
-let sdCatalog={recipes:[],status:null,reading:false,pending:null,loading:false,loadingId:null};
-async function sdNative(path,method,body,signal){const opt=method=='POST'?{method:'POST',signal,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body||{})}:{method:'GET',signal,headers:auth()};const r=await call(`${nativeRoot()}/sdcpp/v1/${path}`,opt);const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,method=='POST'?'load':'model');return j||{}}
+let sdCatalog={recipes:[],status:null,reading:false,rescanning:false,pending:null,loading:false,loadingId:null};
+async function sdNative(path,method,body,signal,scope){const opt=method=='POST'?{method:'POST',signal,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body||{})}:{method:'GET',signal,headers:auth()};const r=await call(`${nativeRoot()}/sdcpp/v1/${path}`,opt);const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,scope||(method=='POST'?'load':'model'));return j||{}}
 // 服务器模型状态 → 界面文案（下拉框占位与状态提示的唯一来源）
 const SD_STATE={loading:{pick:'正在加载模型…',line:'本地模型正在加载…'},switching:{pick:'正在加载模型…',line:'模型切换中…'},error:{pick:'加载失败，未加载模型',line:'本地模型加载失败，当前没有可用模型'},empty:{pick:'未加载模型',line:'当前未加载模型'}};
 function sdLoaded(){const s=sdCatalog.status||{},cli=s.origin=='command_line'||!!(s.runtime_recipe&&s.runtime_recipe.id=='@command-line'),st=s.state||((s.recipe||cli)?'ready':'empty');
@@ -186,6 +186,14 @@ async function sdRead(){if(sdCatalog.reading)return;sdCatalog.reading=true;const
   sdCatalog.pending=keep?sdCatalog.pending:'';
   sdRender();msg('已读取本地配方与模型状态')}
  catch(e){msg(nice(e),1)}finally{sdCatalog.reading=false;if(btn)btn.disabled=sdCatalog.loading}}
+// 服务端重扫时跳过的配方条目 → 用户可读的提示（不静默丢弃）
+function sdRescanNotice(errors){const list=(Array.isArray(errors)?errors:errors?[errors]:[]).filter(Boolean);if(!list.length)return'';
+ const one=e=>{if(typeof e=='string')return e;if(typeof e!='object')return String(e);const f=e.file||e.path||e.recipe||'',m=e.message||e.error||e.reason||'';return (f?f+'：':'')+(m||JSON.stringify(e))};
+ return '重扫发现 '+list.length+' 个无效配方：'+list.map(e=>String(one(e)).slice(0,120)).join('；')}
+// 刷新按钮：先让服务端重扫磁盘，再重读配方目录与已加载模型（顺序固定）
+async function sdRefresh(){if(sdCatalog.reading||sdCatalog.rescanning)return;sdCatalog.rescanning=true;const btn=$('#cfRecipeRefresh');if(btn)btn.disabled=true;msg('正在重扫本地配方与模型文件…');
+ try{const j=await sdNative('models/refresh','POST',{},null,'refresh');const note=sdRescanNotice(j&&j.errors);await sdRead();if(note)msgAdd(note,1)}
+ catch(e){msg(nice(e),1)}finally{sdCatalog.rescanning=false;if(btn)btn.disabled=sdCatalog.reading||sdCatalog.loading}}
 // 读一次服务器模型状态并写回本地状态（读目录与校正共用这一条路径）
 async function sdStatus(){const st=await sdNative('models/status','GET');if(st&&Object.keys(st).length)sdCatalog.status=st;else if(!sdCatalog.status)sdCatalog.status={};return sdCatalog.status}
 // 失败后重新读一次服务器状态：选择器只显示服务器实际在用的配方
@@ -225,14 +233,16 @@ function safeErr(raw,j,rid){const t=String(raw||'')+' '+JSON.stringify(j||'');if
  let r=String(raw||'').trim();if(cfg.key)r=r.split(cfg.key).join('***');e.raw=r||t.slice(0,600);e.zh='被服务商的安全审核拦下了';return e}
 async function apiBody(r){const t=await r.text();try{return JSON.parse(t)}catch(e){r._text=t;return null}}
 const LOAD_ERR={400:'配方配置无效，请刷新配方列表后再试',409:'本地模型正忙（还有生成任务没结束），请稍后再加载',422:'本地模型加载失败',429:'本地服务器繁忙，请稍后重试',500:'本地模型加载时服务器出错',503:'本地模型正在加载中，请稍后再试'};
+const REFRESH_ERR={409:'本地模型正忙，暂时不能重扫配方',503:'本地模型正在加载或卸载，请稍后再重扫'};
 async function apiErr(r,j,scope){const textBody=r._text||'';const raw=(j&&(j.error&&(j.error.message||j.error.status||j.error)||j.message))||textBody||r.statusText||'';{const se=safeErr(typeof raw=='string'?raw:JSON.stringify(raw),j,(j&&j.error&&j.error.request_id)||r.headers.get('x-request-id'));if(se){se.status=r.status;return se}}
- if(isLocal(cfg.prov)){const t=String(typeof raw=='string'?raw:JSON.stringify(raw)).trim(),model=scope=='model',load=scope=='load',code=(j&&(j.code||(j.error&&j.error.code)))||'',cd=code?'（'+code+'）':'';let zh;
+ if(isLocal(cfg.prov)){const t=String(typeof raw=='string'?raw:JSON.stringify(raw)).trim(),model=scope=='model',load=scope=='load',refresh=scope=='refresh',code=(j&&(j.code||(j.error&&j.error.code)))||'',cd=code?'（'+code+'）':'';let zh;
   if(load)zh=(LOAD_ERR[r.status]||('本地模型加载失败（HTTP '+r.status+'）'))+cd+(t?'：'+t.slice(0,300):'');
+  else if(refresh)zh=(REFRESH_ERR[r.status]||('重扫本地配方与模型文件失败'+(r.status?'（HTTP '+r.status+'）':'')))+cd+(t?'：'+t.slice(0,300):'');
   else if(r.status==429)zh=model?'本地服务器繁忙，请稍后重试':'本地生成队列已满，请稍后重试';
   else if(r.status==503)zh=model?'本地模型信息暂不可用（可能正在加载），请稍等再试':'本地模型尚未就绪（可能正在加载），请稍等再重试'+cd+(t?'：'+t.slice(0,300):'');
   else if(r.status>=500)zh=(model?'读取本地模型信息失败':'本地 sd.cpp 服务器报错')+(t?'：'+t.slice(0,300):'');
   else zh=(model?'读取本地模型信息失败':'本地生图失败')+'（HTTP '+r.status+'）'+(t?'：'+t.slice(0,300):'');
-  const e=Error(t);e.status=r.status;e.zh=zh;e.modelState=!model&&!load&&(r.status==503||/model_loading|model_not_loaded/.test(code));return e}
+  const e=Error(t);e.status=r.status;e.zh=zh;e.modelState=!model&&!load&&!refresh&&(r.status==503||/model_loading|model_not_loaded/.test(code));return e}
  const m={400:'请求参数有误：常见原因是模型不支持参考图、画幅尺寸不对或图片格式不支持，可换个模型或画幅再试',401:'密钥无效或已过期，请检查 API Key',403:'没有权限：密钥无此模型权限、账户未验证，或所在地区不受支持',404:'地址或模型不存在：请检查 Base URL 和模型名',413:'图片太大，请换一张更小的照片',429:'请求过于频繁或额度已用完，请稍后再试或检查账户余额',500:'服务商内部错误，请稍后重试',502:'网关错误（中转服务不可用）',503:'服务暂时不可用，请稍后重试',504:'服务商响应超时，请重试'}[r.status]||('请求失败（HTTP '+r.status+'）');
  let t=String(typeof raw=='string'?raw:JSON.stringify(raw));if(cfg.key)t=t.split(cfg.key).join('***');const bad=/API_KEY_INVALID|API key not valid|invalid api key|Incorrect API key|AuthenticationError|InvalidApiKey/i.test(t+' '+JSON.stringify(j||''));const ans=!bad&&t.match(/Argument not supported:\s*(\w+)/i);const e=Error(t);e.status=r.status;e.zh=(bad?'密钥无效或已过期，请检查 API Key':ans?`该服务商不支持 ${ans[1]} 参数：当前接口协议与它的规格对不上，请检查「接口协议」设置（xAI 请改选 xAI 协议）`:m)+(t?`\n服务商返回：${t.slice(0,300)}`:'');return e}
 function nice(e){if(e.name=='AbortError')return'已取消';if(e instanceof TypeError&&isLocal(cfg.prov)){const base=root();if(location.protocol=='https:'&&/^http:\/\//.test(base))return '本地 HTTP 服务器被浏览器拦截：HTTPS 页面不能访问 http:// 本地地址（混合内容）。请改用 http:// 打开 PoseWear（例如 http://localhost:8787），或为本地服务配置 HTTPS 后再试。';return '无法连接到本地 sd.cpp 服务器：请确认 sd-server 已启动并监听当前 Base URL 指向的地址（'+base+'；默认监听 127.0.0.1:1234）。'}if(e instanceof TypeError)return'无法连接到服务商：网络不通，或该地址不允许浏览器跨域访问（CORS）。\n可在 API 设置中开启「通过本站代理转发」。';return e.zh||e.message||String(e)}

@@ -32,6 +32,11 @@ A trained diffusion weight file. A complete generator may need several model fil
 
 A named combination of model files and default generation settings. This is what a user picks when choosing which local model to generate with; it becomes the model in effect only after it has been loaded.
 
+## Rescan（重扫）
+
+A server-side sweep of the recipe and model-file directories that discovers newly added files. The settings 「刷新」 triggers a rescan before re-reading the recipe catalog and the loaded model; this is distinct from a plain re-read of the server's cached catalog, and a rescan never changes the loaded model by itself.
+_Avoid_: 刷新目录, refresh the catalog
+
 ## Loaded model（已加载模型）
 
 The model configuration currently held ready by a local generation server. Generation uses the loaded model; choosing a different recipe takes effect only after that recipe has been explicitly loaded. The interface may only present a loaded model after the server has reported it in its model status.

@@ -11,7 +11,7 @@ PoseWear 访问 stable-diffusion.cpp（`sd-server`）的**原生模型管理端�
 | `/sdcpp/v1/models/load` | POST | 加载指定配方 |
 | `/sdcpp/v1/models/refresh` | POST | 重新扫描配方与模型文件目录 |
 
-本仓库的调用方：`src/studio.js` 的 `sdNative()`（传输族）、`sdRead()`（读目录与状态）、`sdStatus()`（读一次模型状态）、`sdLoad()`（加载）、`sdSync()`（失败后重读状态并校正界面）。改动任一端点用法前先读 `CODING_STANDARDS.md` 的「sd.cpp 模型管理走单一传输族」一条。
+本仓库的调用方：`src/studio.js` 的 `sdNative()`（传输族）、`sdRead()`（读目录与状态）、`sdRefresh()`（重扫后重读）、`sdStatus()`（读一次模型状态）、`sdLoad()`（加载）、`sdSync()`（失败后重读状态并校正界面）。改动任一端点用法前先读 `CODING_STANDARDS.md` 的「sd.cpp 模型管理走单一传输族」一条。
 
 ## GET /sdcpp/v1/recipes
 
@@ -52,7 +52,9 @@ UI 侧：这些状态码与错误码由 `src/studio.js` 的 `apiErr()` 在 **loa
 
 ## POST /sdcpp/v1/models/refresh
 
-请求体为空（`{}` 也可以）。响应只含 `errors`，不返回刷新后的目录；刷新不改变已加载的模型上下文，已加载配方的能力快照要重新加载后才更新。
+请求体为空（`{}` 也可以）。响应只含 `errors`，不返回刷新后的目录；刷新不改变已加载的模型上下文，已加载配方的能力快照要重新加载后才更新。`errors` 是重扫时跳过的无效配方条目（例如 `{"file":"recipes/broken.yaml","message":"invalid slots"}`），PoseWear 会把条目与原因显示在设置面板里，不静默丢弃。
+
+PoseWear 的「刷新」按钮 = **先 POST 重扫，成功后才并发 GET `/recipes` 与 GET `/models/status`**；顺序固定，界面上的配方列表与已加载模型都来自重扫后的读取。重扫失败时用 `'refresh'` 作用域报错（映射表 `REFRESH_ERR`），不重读目录也不误报为模型加载或生图失败；仅打开设置面板时仍只做一次普通读取，不触发重扫。
 
 ## 来源与核对
 

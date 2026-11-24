@@ -16,7 +16,7 @@ Single-context layout: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `
 
 Studio generation and provider branches live in `src/studio.js` (`genOnce`, `run`). Tray quick generation lives in `src/app.js` (`tgSync`, `#tgGo`). See `CODING_STANDARDS.md` when adding a provider branch.
 
-Local sd.cpp model management (recipe catalog, loaded model, explicit recipe load, status reconciliation after a failure) lives in `src/studio.js` (`sdNative`, `sdRead`, `sdStatus`, `sdLoad`, `sdSync`, `sdRender`); the endpoint contract is `docs/sdcpp-api.md`.
+Local sd.cpp model management (recipe catalog, loaded model, explicit recipe load, rescan on refresh, status reconciliation after a failure) lives in `src/studio.js` (`sdNative`, `sdRead`, `sdRefresh`, `sdStatus`, `sdLoad`, `sdSync`, `sdRender`); the endpoint contract is `docs/sdcpp-api.md`.
 
 `src/studio.js` and `src/app.js` use a dense one-line style: copy `old_str` verbatim from a fresh `read_file` and anchor it on a short unique substring. A paraphrased anchor (a retyped or dropped character) silently fails to match, and a multi-line block reformatted into many lines is not an anchor.
 

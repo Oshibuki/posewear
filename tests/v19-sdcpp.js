@@ -1,5 +1,5 @@
 // v19: local stable-diffusion.cpp provider — direct browser connection, no proxy
-// mock knobs: modelStatus (loaded state) · statusReply (override the status) · loadReply (fail the load) · loadStatus (state after a failed load) · catalog / catalogReply (recipe list) · reply (generation response) · loadDelay (slow load) · hits (recorded requests)
+// mock knobs: modelStatus (loaded state) · statusReply (override the status) · loadReply (fail the load) · loadStatus (state after a failed load) · catalog / catalogReply (recipe list) · refreshResult / refreshReply (rescan response) · reply (generation response) · loadDelay (slow load) · hits (recorded requests)
 const { chromium } = require('playwright'); const path = require('path'), FX = path.join(__dirname, 'fixtures') + '/'; const fs = require('fs');
 (async () => {
   const U = process.env.U || 'http://localhost:8787'; const b = await chromium.launch({ executablePath: process.env.CHROME_PATH }); const R = [], errs = [];
@@ -9,7 +9,7 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
   const RECIPES = [{ id: 'flux1-dev', name: 'FLUX.1 dev' }, { id: 'sdxl-base', name: 'SDXL Base' }];
   const READY = { state: 'ready', recipe: 'flux1-dev', models: { diffusion_model: 'diffusion_models/flux1-dev.gguf' }, error: null, revision: 1 };
   const CLI = { state: 'ready', origin: 'command_line', recipe: null, runtime_recipe: { id: '@command-line', name: 'Command line' }, models: { model: 'checkpoints/cli.gguf' }, error: null, revision: 1 };
-  let catalog = { recipes: RECIPES, errors: [] }, modelStatus = READY, catalogReply = null, loadReply = null, loadDelay = 0, statusReply = null, loadStatus = null;
+  let catalog = { recipes: RECIPES, errors: [] }, modelStatus = READY, catalogReply = null, loadReply = null, loadDelay = 0, statusReply = null, loadStatus = null, refreshResult = {}, refreshReply = null;
   const handler = async route => {
     const req = route.request(), u = req.url(), H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
     if (req.method() == 'OPTIONS') return route.fulfill({ status: 204, headers: H });
@@ -17,6 +17,7 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     if (u.includes('/api/proxy')) return route.fulfill({ status: 403, headers: H, body: '{"error":{"message":"proxy should not be used"}}' });
     if (/\/sdcpp\/v1\/recipes$/.test(u)) return route.fulfill({ status: catalogReply ? catalogReply.status : 200, headers: H, body: catalogReply && catalogReply.body !== undefined ? catalogReply.body : JSON.stringify(catalog) });
     if (/\/sdcpp\/v1\/models\/status$/.test(u)) return route.fulfill({ status: 200, headers: H, body: JSON.stringify(statusReply || modelStatus) });
+    if (/\/sdcpp\/v1\/models\/refresh$/.test(u)) return route.fulfill({ status: refreshReply ? refreshReply.status || 200 : 200, headers: H, body: refreshReply && refreshReply.body !== undefined ? refreshReply.body : JSON.stringify(refreshResult) });
     if (/\/sdcpp\/v1\/models\/load$/.test(u)) {
       if (loadDelay) await new Promise(r => setTimeout(r, loadDelay));
       if (loadReply) { if (loadStatus) modelStatus = loadStatus; return route.fulfill({ status: loadReply.status || 422, headers: H, body: loadReply.body !== undefined ? loadReply.body : JSON.stringify({ error: 'Failed to initialize the selected model', code: 'model_load_failed' }) }); }
@@ -94,20 +95,51 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     R.push(['catalog read failure is not a generation failure', /读取本地模型/.test(text) && !/生图失败/.test(text), text]);
     catalogReply = null; await c.close() }
 
-  // —— 显式刷新：重新读取目录与状态，不触发生图或模型加载
-  { catalog = { recipes: RECIPES, errors: [] }; modelStatus = READY;
+  // —— 显式刷新：先让服务端重扫配方与模型文件，再读目录与状态（#8）
+  { catalog = { recipes: RECIPES, errors: [] }; modelStatus = READY; refreshResult = {}; refreshReply = null;
     const { c, p } = await setup(SD_CFG); hits = [];
     await p.click('#wbCfg');
     await waitCatalog(p);
     const before = hits.filter(h => /\/sdcpp\/v1\//.test(h.url)).length;
-    catalog = { recipes: RECIPES.concat([{ id: 'sd35', name: 'SD 3.5 Large' }]), errors: [] }; modelStatus = Object.assign({}, READY, { recipe: 'sd35' });
+    catalog = { recipes: RECIPES.concat([{ id: 'sd35', name: 'SD 3.5 Large' }]), errors: [] };
     await p.click('#cfRecipeRefresh', { timeout: 2000 }).catch(() => {});
     await p.waitForFunction(() => [...document.querySelectorAll('#cfRecipe option')].some(o => o.value === 'sd35'), null, { timeout: 5000 }).catch(() => {});
-    const after = hits.filter(h => /\/sdcpp\/v1\//.test(h.url)).length, fresh = hits.slice(before);
-    R.push(['refresh re-reads catalog and status', after >= before + 2 && fresh.some(h => /\/sdcpp\/v1\/recipes$/.test(h.url)) && fresh.some(h => /\/sdcpp\/v1\/models\/status$/.test(h.url)), hits.map(h => h.url).join(' | ')]);
-    R.push(['refresh updates options and loaded state', (await p.$$eval('#cfRecipe option', es => es.length).catch(() => 0)) === 3 && /SD 3\.5 Large/.test(await p.$eval('#cfLoaded', e => e.textContent).catch(() => '')), '']);
-    R.push(['refresh does not load a recipe', !hits.some(h => /\/sdcpp\/v1\/models\/load/.test(h.url)), hits.map(h => h.url).join(' | ')]);
+    const fresh = hits.slice(before).filter(h => /\/sdcpp\/v1\//.test(h.url));
+    const paths = fresh.map(h => h.method + ' ' + new URL(h.url).pathname);
+    R.push(['refresh rescans before reading catalog and status', paths.length >= 3 && /^POST \/sdcpp\/v1\/models\/refresh$/.test(paths[0]) && paths.slice(1).includes('GET /sdcpp/v1/recipes') && paths.slice(1).includes('GET /sdcpp/v1/models/status'), paths.join(' | ')]);
+    R.push(['refresh updates the recipe list', (await p.$$eval('#cfRecipe option', es => es.length).catch(() => 0)) === 3, '']);
+    R.push(['refresh keeps the server-reported loaded model', /FLUX\.1 dev/.test(await p.$eval('#cfLoaded', e => e.textContent).catch(() => '')), await p.$eval('#cfLoaded', e => e.textContent).catch(() => '')]);
+    await p.selectOption('#cfRecipe', 'sd35');
+    await p.click('#cfRecipeLoad', { timeout: 2000 }).catch(() => {});
+    await p.waitForFunction(() => /当前已加载：SD 3\.5 Large/.test(document.querySelector('#cfLoaded').textContent), null, { timeout: 5000 }).catch(() => {});
+    const loads = hits.filter(h => /\/sdcpp\/v1\/models\/load$/.test(h.url)); let lb = null; try { lb = JSON.parse(loads[0].body) } catch (e) {}
+    R.push(['rescanned recipe can be selected and loaded', loads.length === 1 && !!lb && lb.recipe === 'sd35' && /当前已加载：SD 3\.5 Large/.test(await p.$eval('#cfLoaded', e => e.textContent).catch(() => '')), hits.map(h => h.method + ' ' + h.url).join(' | ')]);
     await c.close() }
+
+  // —— 重扫发现无效配方：提示具体条目，不静默丢弃（#8）
+  { catalog = { recipes: RECIPES, errors: [] }; modelStatus = READY; refreshReply = null;
+    refreshResult = { errors: [{ file: 'recipes/broken.yaml', message: 'invalid slots' }, { file: 'models/missing.gguf', message: 'file not found' }, { file: 'recipes/old.yaml', message: 'unknown slot' }, { file: 'models/typo.gguf', message: 'bad path' }] };
+    const { c, p } = await setup(SD_CFG); hits = [];
+    await p.click('#wbCfg'); await waitCatalog(p);
+    await p.click('#cfRecipeRefresh', { timeout: 2000 }).catch(() => {});
+    await p.waitForFunction(() => /无效配方/.test(document.querySelector('#cfMsg').textContent), null, { timeout: 5000 }).catch(() => {});
+    const text = await p.$eval('#cfMsg', e => e.textContent).catch(() => '');
+    const cls = await p.$eval('#cfMsg', e => e.className).catch(() => '');
+    R.push(['rescan reports invalid recipe entries', /无效配方/.test(text) && /broken\.yaml/.test(text) && /invalid slots/.test(text) && /missing\.gguf/.test(text), text]);
+    R.push(['no invalid entry is dropped', /old\.yaml/.test(text) && /typo\.gguf/.test(text) && /bad path/.test(text), text]);
+    R.push(['invalid entries are shown as a problem', /\bbad\b/.test(cls), cls]);
+    refreshResult = {}; await c.close() }
+
+  // —— 重扫失败：按重扫作用域报错，不误报为加载或生图失败（#8）
+  { catalog = { recipes: RECIPES, errors: [] }; modelStatus = READY; refreshResult = {};
+    refreshReply = { status: 500, body: JSON.stringify({ error: 'rescan crashed' }) };
+    const { c, p } = await setup(SD_CFG); hits = [];
+    await p.click('#wbCfg'); await waitCatalog(p);
+    await p.click('#cfRecipeRefresh', { timeout: 2000 }).catch(() => {});
+    await p.waitForFunction(() => /失败/.test(document.querySelector('#cfMsg').textContent), null, { timeout: 5000 }).catch(() => {});
+    const text = await p.$eval('#cfMsg', e => e.textContent).catch(() => '');
+    R.push(['rescan failure names the rescan', /重扫/.test(text) && /rescan crashed/.test(text) && !/加载失败|生图失败/.test(text), text]);
+    refreshReply = null; await c.close() }
 
   // —— 显式确认加载配方：改下拉只改待选状态，确认才发一次加载请求
   { catalog = { recipes: RECIPES, errors: [] }; modelStatus = READY; loadDelay = 800;

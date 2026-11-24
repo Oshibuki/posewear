@@ -16,7 +16,7 @@ Calls to the sd.cpp native `/sdcpp/v1/*` endpoints (recipes, models/status, mode
 
 ## Error scopes in `apiErr()` are a fixed vocabulary
 
-`apiErr(r, j, scope)` takes one scope, and each scope has its own wording: no scope = generation failure, `'model'` = reading model information, `'load'` = loading a model (mapped by the `LOAD_ERR` table). Pick the scope that matches what the request was doing; do not reuse a generation phrase for a model-management failure, and do not add wording outside the shared helpers.
+`apiErr(r, j, scope)` takes one scope, and each scope has its own wording: no scope = generation failure, `'model'` = reading model information, `'load'` = loading a model (mapped by the `LOAD_ERR` table), `'refresh'` = rescanning the recipe/model directories (mapped by `REFRESH_ERR`). Pick the scope that matches what the request was doing; do not reuse a generation phrase for a model-management failure, and do not add wording outside the shared helpers.
 
 ## Never claim a model is active before the server says so
 
