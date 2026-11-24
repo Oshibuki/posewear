@@ -39,6 +39,9 @@
 | Gemini | Google AI Studio のキー | gemini-2.5-flash-image | 別名 Nano Banana |
 | Doubao Seedream | Volcengine Ark のキー | doubao-seedream-4-0-250828 | CORS のため既定でサイトのプロキシ経由 |
 | Custom relay | ベース URL、キー、モデル | 任意 | OpenAI 互換（edits / generations）または Gemini プロトコル（`models/:generateContent`）。プロキシのトグルはリレーにも適用され、オフの場合は直接接続、リレーのエンドポイントは任意のポートを使用可能 |
+| ローカル sd.cpp | ローカルで動かす sd-server（既定は 127.0.0.1:1234）。ループバックアドレスにのみバインド | `sd-cpp-local`（ローカルのレシピを選択） | API キー不要、サイトのプロキシは経由しません。ブラウザから直接接続 |
+
+HTTPS で開いたページからローカルの HTTP サーバーへのアクセスは混合コンテンツとしてブロックされます。`http://` で PoseWear を開く（例：`http://localhost:8787`）、またはローカルサーバーに HTTPS を設定してください。sd-server には認証がないため、ループバック以外に公開しないでください。
 
 ## 変更履歴
 

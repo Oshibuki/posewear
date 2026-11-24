@@ -39,6 +39,9 @@ Pose, outfit and portrait reference galleries with bilingual prompts, plus a bri
 | Gemini | Google AI Studio key | gemini-2.5-flash-image | a.k.a. Nano Banana |
 | Doubao Seedream | Volcengine Ark key | doubao-seedream-4-0-250828 | routed through the site proxy by default for CORS |
 | Custom relay | Base URL, key and model | any | OpenAI-compatible (edits / generations) or the Gemini protocol (`models/:generateContent`); the proxy toggle applies to relays too — unticked means direct connections, and relay endpoints may use any port |
+| Local sd.cpp | A local sd-server (defaults to 127.0.0.1:1234), bound to loopback only | `sd-cpp-local` (choose a local recipe) | No API key, no site proxy — the browser connects straight to your machine |
+
+If PoseWear is opened over HTTPS, the browser blocks plain HTTP calls to a local server as mixed content. Open the site with `http://` (e.g. `http://localhost:8787`), or configure HTTPS for the local server. sd-server has no authentication: keep it bound to loopback, and never expose it to the LAN or the internet.
 
 ## Changelog
 
