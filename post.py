@@ -84,8 +84,9 @@ open(f'{D}/404.html','w').write(f'''<!doctype html><html lang="zh-CN"><head><met
 .nf{{max-width:480px;margin:12vh auto;text-align:center;padding:0 20px}}.nf b{{font-size:64px;color:#d81b3a;display:block;line-height:1}}</style></head><body><header><a href="/">{LOGO}衣姿 PoseWear</a></header>
 <div class="nf"><b>404</b><h1>这个页面不存在</h1><p class="mu">链接可能写错了，或者内容已经调整。</p><a class="go" href="/">回到首页</a><a class="go" style="background:#111" href="/#costume">看看服装库</a></div></body></html>''')
 _IMG=" ".join(["'self'","data:","blob:"]+list(DEPTH_ORIGINS)+list(HOTLINK_ORIGINS)+([AH] if AH else []))
+# 本地推理服务（lemonade 13305 / sd-server 1234 等）用端口通配放行；http 的 127.0.0.1/localhost 属 potentially trustworthy origin，不受 upgrade-insecure-requests 与混合内容拦截影响
 CSP=("default-src 'self'; script-src 'self' "+SH+(" https://static.cloudflareinsights.com" if WAT else "")+"; style-src 'self' 'unsafe-inline'; img-src "+_IMG+"; font-src 'self' data:; "
- "connect-src 'self' data: blob: https://api.openai.com https://generativelanguage.googleapis.com https://*.volces.com https://*.bytepluses.com https://oaidalleapiprodscus.blob.core.windows.net https://*.googleusercontent.com"+(" "+" ".join(HOTLINK_ORIGINS) if HOTLINK_ORIGINS else "")+(" https://cloudflareinsights.com" if WAT else "")+"; "
+ "connect-src 'self' data: blob: https://api.openai.com https://generativelanguage.googleapis.com https://*.volces.com https://*.bytepluses.com https://oaidalleapiprodscus.blob.core.windows.net https://*.googleusercontent.com http://127.0.0.1:* http://localhost:*"+(" "+" ".join(HOTLINK_ORIGINS) if HOTLINK_ORIGINS else "")+(" https://cloudflareinsights.com" if WAT else "")+"; "
  "worker-src 'self'; manifest-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests")
 IMM='  Cache-Control: public, max-age=31536000, immutable\n'
 # Pages Functions 必须位于部署目录内才会随 wrangler pages deploy 一起发布（曾因只传静态产物导致 /api/proxy 丢失，见 issue #7）
