@@ -20,3 +20,4 @@ Reference-image generation requests across providers share the same multipart pi
 - Existing providers keep their tolerant field/endpoint fallbacks and warnings; the shared helper returns `{ blob, warn? }` so callers do not invent result shapes.
 - Tests stay at the browser HTTP boundary; no internal helper tests are introduced.
 - Recipe loading (issue #6) and failed-load reconciliation (issue #7) remain separate; generation still uses the fixed OpenAI-family model ID.
+- This client-side strictness does not guarantee that the local server uses the images; model-dependent server behaviour is recorded in `docs/sdcpp-api.md` ("参考图能力矩阵（生成端点）").

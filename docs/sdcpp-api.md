@@ -58,6 +58,21 @@ UI 侧：这些状态码与错误码由 `src/studio.js` 的 `apiErr()` 在 **loa
 
 PoseWear 的「刷新」按钮 = **先 POST 重扫，成功后才并发 GET `/recipes` 与 GET `/models/status`**；顺序固定，界面上的配方列表与已加载模型都来自重扫后的读取。重扫失败时用 `'refresh'` 作用域报错（映射表 `REFRESH_ERR`），不重读目录也不误报为模型加载或生图失败；仅打开设置面板时仍只做一次普通读取，不触发重扫。
 
+## 参考图能力矩阵（生成端点）
+
+PoseWear 客户端严格发送参考图且不做字段/端点回退（见 ADR-0002）。下表描述上游服务端是否采用这些图像；两者不是同一层。请求已发出 ≠ 参考图已生效。
+
+非穷尽清单，核对自 stable-diffusion.cpp 固定 commit `6b3edaaf32cc19e5bb2d819c788bd557eddc8eba` 的 `docs/`，核对日期 2026-11-24；新增模型查对应上游 docs。
+
+| 模型族 / 代表模型 | 参考图生图能力（按上游示例） | 图像输入方式 | 备注 / 风险 | 依据 |
+|---|---|---|---|---|
+| Stable Diffusion 1.x（示例为 SD 1.4） | 有示例（img2img） | `sd-cli -i ... --strength` | 文档明确给出从参考图生成结果的命令 | `docs/sd.md`，固定 commit `6b3edaa` |
+| FLUX.2-dev / klein 4B / klein 9B | 有示例（参考图输入） | `sd-cli -r` | 文档示例从参考图生成编辑结果；未使用 `img2img` 一词，不据此否认能力 | `docs/flux2.md`，固定 commit `6b3edaa` |
+| FLUX.1-Kontext-dev、Qwen Image Edit | 有示例（参考图输入） | `sd-cli -r` + 编辑提示词 | 文档示例为参考图 + 编辑指令生成结果，属于基于参考图的能力 | `docs/kontext.md`、`docs/qwen_image_edit.md`，固定 commit `6b3edaa` |
+| Stable Diffusion 2.x / SDXL、视频模型、仅文生架构 | 未标注 | 未在对应 docs 中给出参考图生图示例 | 不能据此断定不支持；若上游报错或忽略图像，PoseWear 不会静默改走纯文字 | 对应上游 docs 未给出示例，固定 commit `6b3edaa` |
+
 ## 来源与核对
 
 契约核对自 stable-diffusion.cpp 的 `examples/server/api.md`（上游仓库 `ggml-org/stable-diffusion.cpp`；核对时使用过同名 fork 的 `master` 镜像，上游 master 的 raw 链接当时返回 404）。**改动前先确认上游文件位置**，字段或端点若已变化，以本文件与上游一致为准并同步更新。
+
+能力矩阵另按固定 commit `6b3edaaf32cc19e5bb2d819c788bd557eddc8eba` 核对 `docs/sd.md`、`docs/flux2.md`、`docs/kontext.md`、`docs/qwen_image_edit.md`。矩阵条目变化时必须同步更新依据列、版本/commit 与核对日期。判断标准是模型是否提供「从参考图生成结果图」的能力，不是上游文档是否出现 `img2img` 一词；上游 API 文档把 `image[]` 列为首选上传字段、`ref_images` 列为 `img_gen` 能力，但没有逐模型说明哪些模型采用这些图像，不能据此否认已展示的参考图生图能力。

@@ -9,7 +9,7 @@ import pathlib, re, sys
 from collections import namedtuple
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DocSpec = namedtuple('DocSpec', 'section header peers row https cors')
+DocSpec = namedtuple('DocSpec', 'section header peers row https cors capability')
 COMMON_PEERS = ['OpenAI', 'Gemini', 'Doubao Seedream', 'Custom relay']
 
 DOCS = {
@@ -20,6 +20,7 @@ DOCS = {
         row=['sd.cpp', 'sd-server', '127.0.0.1:1234', '不需要 API Key', '只绑定本机', '不经过本站代理'],
         https=['HTTPS', 'http://', 'localhost:8787', '配置 HTTPS'],
         cors=['CORS', 'Access-Control-Allow-Origin', 'OPTIONS', 'connect-src', '预检', '无需额外配置'],
+        capability=['参考图会被严格发送', '基于参考图的生图能力', '报错或忽略图像', 'docs/sdcpp-api.md'],
     ),
     'README.en.md': DocSpec(
         section=('### Providers', '## Changelog'),
@@ -28,6 +29,7 @@ DOCS = {
         row=['sd.cpp', 'sd-server', '127.0.0.1:1234', 'No API key', 'loopback', 'no site proxy'],
         https=['HTTPS', 'http://', 'localhost:8787', 'configure HTTPS for the local server'],
         cors=['CORS', 'Access-Control-Allow-Origin', 'OPTIONS', 'connect-src', 'preflight', 'no extra setup'],
+        capability=['Reference images are always sent strictly', 'reference-image-based generation', 'report an error or ignore the image', 'docs/sdcpp-api.md'],
     ),
     'README.ja.md': DocSpec(
         section=('### プロバイダー', '## 変更履歴'),
@@ -36,6 +38,7 @@ DOCS = {
         row=['sd.cpp', 'sd-server', '127.0.0.1:1234', 'API キー不要', 'ループバック', 'プロキシは経由しません'],
         https=['HTTPS', 'http://', 'localhost:8787', 'HTTPS を設定'],
         cors=['CORS', 'Access-Control-Allow-Origin', 'OPTIONS', 'connect-src', 'プリフライト', '追加設定は不要'],
+        capability=['参考画像は常に厳密に送信されます', '参考画像に基づく生成に対応', 'エラーになる、または画像が無視される', 'docs/sdcpp-api.md'],
     ),
 }
 
@@ -94,6 +97,9 @@ def check_doc(name, spec, problems):
     missing = missing_facts(spec.cors, section)
     if missing:
         problems.append(f'{name}: local CORS note misses {missing}')
+    missing = missing_facts(spec.capability, section)
+    if missing:
+        problems.append(f'{name}: reference-image capability note misses {missing}')
 
 
 def main():
