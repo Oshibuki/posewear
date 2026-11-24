@@ -53,7 +53,13 @@
 | 自定义中转 | Base URL + Key + 模型名 | 自填 | OpenAI 兼容（edits / generations）或 Gemini 协议（`models/:generateContent`）；代理开关对中转同样生效，未勾选时代理直连，中转地址可用任意端口 |
 | 本地 sd.cpp | 本机运行的 sd-server（默认监听 127.0.0.1:1234），只绑定本机地址 | `sd-cpp-local`（选本机配方） | 不需要 API Key，也不经过本站代理；从浏览器直连本机 |
 
-HTTPS 页面访问本地 HTTP 服务会被浏览器当作混合内容拦截：请用 http:// 打开 PoseWear（例如 http://localhost:8787），或为本地服务配置 HTTPS。sd-server 没有鉴权，请保持只监听本机地址，不要暴露到局域网或公网。
+回环地址（`127.0.0.1` / `localhost`）在 Chrome、Firefox 中通常被视为可信来源，HTTPS 页面调用本地 HTTP 服务不会被当作混合内容拦截；Safari、旧版浏览器或企业策略仍可能拦截，较新的 Chrome 还可能要求你允许「本地网络访问」。遇到这类拦截时，请用 http:// 打开 PoseWear（例如 http://localhost:8787），或为本地服务配置 HTTPS。sd-server 没有鉴权，请保持只监听本机地址，不要暴露到局域网或公网。
+
+### 本地 API 的跨域要求
+
+从 PoseWear 页面访问 `127.0.0.1` 属于跨源请求。CORS 由**本地服务**用响应头声明、由浏览器强制执行；本站没有“开启 CORS”的开关。原版 sd-server 默认回显请求的 `Origin`、允许所有方法与头，并对 `OPTIONS` 预检返回 204，因此无需额外配置。若换成自研或第三方本地服务，请让它在响应里给出 `Access-Control-Allow-Origin`（回显本站 Origin 或 `*`）、`Access-Control-Allow-Methods: GET, POST, OPTIONS`、`Access-Control-Allow-Headers: Content-Type`，并能处理 `OPTIONS` 预检。JSON 生图与原生模型管理请求带 `Content-Type: application/json`，会触发预检；multipart 参考图请求不触发。PoseWear 不发送凭据，不能同时使用 `Allow-Credentials: true` 和 `Allow-Origin: *`。
+
+本站一侧的对应配置是构建时 CSP 的 `connect-src` 白名单（已放行 `http://127.0.0.1:*` 和 `http://localhost:*`）与本地服务商固定直连、代理关闭；两者都不是用户开关，本站代理也拒绝内网地址，不能用来代替 CORS。三种“连不上”要分开看：CORS 看本地服务响应头与预检，混合内容看页面与本地服务的协议，CSP 看站点白名单。
 
 ## 更新日志
 

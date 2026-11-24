@@ -4,6 +4,8 @@ PoseWear 访问 stable-diffusion.cpp（`sd-server`）的**原生模型管理端�
 
 **Base**：配置里的 Base URL 去掉结尾 `/v1`，默认 `http://127.0.0.1:1234`。端点前缀 `/sdcpp/v1/`。**直连，不经过本站代理，不带鉴权头**（`auth()` 对 sdcpp 返回 `{}`）。
 
+**跨源**：浏览器从站点 Origin 直连回环地址属于跨源请求；CORS 由本地服务的响应头声明、由浏览器强制执行，本站没有 CORS 开关，也不能改用本站代理（代理拒绝内网地址）。sd-server 默认回显 `Origin`、允许所有方法与头、`OPTIONS` 应答 204，因此无需用户配置。若接入非 sd-server 的本地实现，至少返回 `Access-Control-Allow-Origin`（回显站点 Origin 或 `*`）、`Access-Control-Allow-Methods: GET, POST, OPTIONS`、`Access-Control-Allow-Headers: Content-Type` 并处理 `OPTIONS`；`POST` 的 `Content-Type: application/json` 会触发预检。PoseWear 不带凭据，回显 Origin 与 `*` 均可，但不能与 `Allow-Credentials: true` 并用。站点侧的可达性由构建期 CSP `connect-src http://127.0.0.1:* http://localhost:*` 放行（`post.py`），与 CORS 是两层机制。
+
 | 端点 | 方法 | 用途 |
 |---|---|---|
 | `/sdcpp/v1/recipes` | GET | 配方目录 |

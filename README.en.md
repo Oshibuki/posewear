@@ -41,7 +41,13 @@ Pose, outfit and portrait reference galleries with bilingual prompts, plus a bri
 | Custom relay | Base URL, key and model | any | OpenAI-compatible (edits / generations) or the Gemini protocol (`models/:generateContent`); the proxy toggle applies to relays too — unticked means direct connections, and relay endpoints may use any port |
 | Local sd.cpp | A local sd-server (defaults to 127.0.0.1:1234), bound to loopback only | `sd-cpp-local` (choose a local recipe) | No API key, no site proxy — the browser connects straight to your machine |
 
-If PoseWear is opened over HTTPS, the browser blocks plain HTTP calls to a local server as mixed content. Open the site with `http://` (e.g. `http://localhost:8787`), or configure HTTPS for the local server. sd-server has no authentication: keep it bound to loopback, and never expose it to the LAN or the internet.
+Loopback addresses (`127.0.0.1` / `localhost`) are generally treated as potentially trustworthy by Chrome and Firefox, so an HTTPS page calling a local HTTP server is not blocked as mixed content there. Safari, older browsers and enterprise policies can still block it, and newer Chrome versions may ask you to allow local network access. If that happens, open PoseWear with `http://` (e.g. `http://localhost:8787`), or configure HTTPS for the local server. sd-server has no authentication: keep it bound to loopback, and never expose it to the LAN or the internet.
+
+### Cross-origin requirements for the local API
+
+A request from the PoseWear page to `127.0.0.1` is cross-origin. CORS is declared by the **local server** in response headers and enforced by the browser; there is no "enable CORS" toggle in this site. Stock sd-server already echoes the request `Origin`, allows all methods and headers, and answers `OPTIONS` preflights with 204, so no extra setup is needed. For a custom or third-party local service, return `Access-Control-Allow-Origin` (the site Origin or `*`), `Access-Control-Allow-Methods: GET, POST, OPTIONS`, `Access-Control-Allow-Headers: Content-Type`, and handle `OPTIONS`. JSON generation and native model requests send `Content-Type: application/json` and trigger a preflight; multipart reference-image requests do not. PoseWear sends no credentials, so do not combine `Allow-Credentials: true` with `Allow-Origin: *`.
+
+On the site side the matching settings are the build-time CSP `connect-src` allowlist (already permitting `http://127.0.0.1:*` and `http://localhost:*`) and the local provider's forced direct connection with proxy off. Neither is user-configurable, and the site proxy rejects private addresses, so it cannot replace CORS. Diagnose the three "cannot connect" cases separately: CORS means local headers/preflight, mixed content means a protocol mismatch between the page and the local server, and CSP means the site allowlist.
 
 ## Changelog
 

@@ -9,7 +9,7 @@ import pathlib, re, sys
 from collections import namedtuple
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DocSpec = namedtuple('DocSpec', 'section header peers row https')
+DocSpec = namedtuple('DocSpec', 'section header peers row https cors')
 COMMON_PEERS = ['OpenAI', 'Gemini', 'Doubao Seedream', 'Custom relay']
 
 DOCS = {
@@ -19,6 +19,7 @@ DOCS = {
         peers=['OpenAI', 'Gemini', '豆包 Seedream', '自定义中转'],
         row=['sd.cpp', 'sd-server', '127.0.0.1:1234', '不需要 API Key', '只绑定本机', '不经过本站代理'],
         https=['HTTPS', 'http://', 'localhost:8787', '配置 HTTPS'],
+        cors=['CORS', 'Access-Control-Allow-Origin', 'OPTIONS', 'connect-src', '预检', '无需额外配置'],
     ),
     'README.en.md': DocSpec(
         section=('### Providers', '## Changelog'),
@@ -26,6 +27,7 @@ DOCS = {
         peers=COMMON_PEERS,
         row=['sd.cpp', 'sd-server', '127.0.0.1:1234', 'No API key', 'loopback', 'no site proxy'],
         https=['HTTPS', 'http://', 'localhost:8787', 'configure HTTPS for the local server'],
+        cors=['CORS', 'Access-Control-Allow-Origin', 'OPTIONS', 'connect-src', 'preflight', 'no extra setup'],
     ),
     'README.ja.md': DocSpec(
         section=('### プロバイダー', '## 変更履歴'),
@@ -33,6 +35,7 @@ DOCS = {
         peers=COMMON_PEERS,
         row=['sd.cpp', 'sd-server', '127.0.0.1:1234', 'API キー不要', 'ループバック', 'プロキシは経由しません'],
         https=['HTTPS', 'http://', 'localhost:8787', 'HTTPS を設定'],
+        cors=['CORS', 'Access-Control-Allow-Origin', 'OPTIONS', 'connect-src', 'プリフライト', '追加設定は不要'],
     ),
 }
 
@@ -88,6 +91,9 @@ def check_doc(name, spec, problems):
     missing = missing_facts(spec.https, section)
     if missing:
         problems.append(f'{name}: HTTPS/local-HTTP note misses {missing}')
+    missing = missing_facts(spec.cors, section)
+    if missing:
+        problems.append(f'{name}: local CORS note misses {missing}')
 
 
 def main():
@@ -105,7 +111,7 @@ def main():
         print('FAIL sd.cpp documentation contract:')
         print('\n'.join('  ' + p for p in problems))
         return 1
-    print('PASS sd.cpp documented in all three READMEs; settings help agrees on setup and HTTPS')
+    print('PASS sd.cpp docs, CORS notes and settings help are consistent')
     return 0
 
 

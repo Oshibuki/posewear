@@ -18,7 +18,8 @@ Image generation uses the OpenAI-compatible family (`/v1/images/edits` and `/v1/
 ## Consequences
 
 - The existing proxy security boundary and its tests remain intact.
-- When PoseWear is served over HTTPS, a browser will block a plain-HTTP request to `127.0.0.1` as mixed content; the UI must surface this as a clear error and the user must arrange local HTTPS or an equivalent local solution. This is accepted as a user-side setup step.
+- CORS is declared by the local server and enforced by the browser; this site has no CORS toggle. The code-side reachability settings are the direct-connection provider policy and the build-time CSP `connect-src` allowlist. The proxy cannot substitute for CORS because it refuses private addresses.
+- Loopback HTTP is generally treated as potentially trustworthy by Chrome and Firefox, so HTTPS pages can usually call `127.0.0.1` without a mixed-content block. Safari, older browsers, enterprise policies and newer local-network permission prompts can still block or gate it; the UI must surface a connection failure clearly, and opening the site over http:// or arranging local HTTPS remains a user-side fallback.
 - Because sd.cpp has no authentication and reflects any Origin, the local server is exposed to any page the user visits while it runs; binding to loopback is therefore required, and widening the listen address is discouraged in documentation.
 - Image generation reuses the OpenAI-compatible response shape, so the generation adapter needs one new branch. Model selection adds a separate native-API surface; the two are kept distinct so the synchronous generation path stays simple.
 - Model loading is an explicit user action with a visible pending state. A failed load must not silently leave the previous model in effect under a new label.
