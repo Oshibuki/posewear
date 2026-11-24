@@ -56,3 +56,7 @@ If the concept you need isn't in the glossary yet, that's a signal: either you'r
 If your output contradicts an existing ADR, surface it explicitly rather than silently overriding:
 
 > _Contradicts ADR-0007 (event-sourced orders), but worth reopening because…_
+
+## Supersede plan drafts in the same commit
+
+When implementation replaces a draft section in `docs/plans/*.md` (for example a wording draft that the shipped README now covers), add a dated "已被实施取代 / superseded — see `<file>`" note to the draft in the same commit. A stale draft left next to the shipped text becomes a false spec source at the next review.
