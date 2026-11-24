@@ -157,10 +157,14 @@ function msg(t,bad){const m=$('#cfMsg');m.textContent=t;m.className='fine '+(bad
 function msgAdd(t,bad){const m=$('#cfMsg');if(m){m.textContent=(m.textContent||'')+(m.textContent?'；':'')+t;if(bad)m.className='fine bad'}}
 // ---------- 本地模型发现与加载（sd.cpp 原生 API，与生图接口分开） ----------
 function nativeRoot(){const b=normBase(cfg.base)||PROV[cfg.prov].base;return b.replace(/\/v1(?:beta|alpha)?$/,'')}
-let sdCatalog={recipes:[],models:[],status:null,reading:false,rescanning:false,pending:null,loading:false,loadingId:null};
+let sdCatalog={recipes:[],models:[],status:null,native:null,reading:false,rescanning:false,pending:null,loading:false,loadingId:null};
 function renderModels(){const dl=$('#cfModels');if(!dl)return;const ids=isLocal(cfg.prov)?[...new Set(sdCatalog.models.filter(Boolean))]:PROV[cfg.prov].models||[];dl.replaceChildren(...ids.map(id=>{const o=document.createElement('option');o.value=id;return o}))}
-async function readModels(){const r=await call(`${root()}/models`,{method:'GET',headers:auth()});const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,'model');const ids=[...new Set((j&&j.data||[]).map(m=>m&&m.id).filter(Boolean))];sdCatalog.models=ids;renderModels();return ids}
-async function sdNative(path,method,body,signal,scope){const opt=method=='POST'?{method:'POST',signal,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body||{})}:{method:'GET',signal,headers:auth()};const r=await call(`${nativeRoot()}/sdcpp/v1/${path}`,opt);const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,scope||(method=='POST'?'load':'model'));return j||{}}
+async function readModels(){const r=await call(`${root()}/models`,{method:'GET',headers:auth()});const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,'model');const ids=[...new Set((j&&j.data||[]).map(m=>m&&m.id).filter(Boolean))];sdCatalog.models=ids;renderModels();
+ if(isLocal(cfg.prov)&&ids.length&&(!cfg.model||!ids.includes(cfg.model))){cfg.model=ids[0];$('#cfModel').value=cfg.model;SV('wbCfg',cfg);msg('当前模型不在模型目录中，已改用 '+cfg.model)}
+ return ids}
+async function sdNative(path,method,body,signal,scope){const opt=method=='POST'?{method:'POST',signal,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body||{})}:{method:'GET',signal,headers:auth()};const r=await call(`${nativeRoot()}/sdcpp/v1/${path}`,opt);const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,scope||(method=='POST'?'load':'model'));
+ if(!j||typeof j!='object'||Array.isArray(j)||(r.headers.get('content-type')||'').toLowerCase().includes('text/html')){const e=Error('This server does not expose the sd.cpp native model-management API');e.unsupported=true;e.zh='此服务端未提供 sd.cpp 原生模型管理端点，已改用 OpenAI 兼容模型目录。';throw e}
+ return j}
 // 服务器模型状态 → 界面文案（下拉框占位与状态提示的唯一来源）
 const SD_STATE={loading:{pick:'正在加载模型…',line:'本地模型正在加载…'},switching:{pick:'正在加载模型…',line:'模型切换中…'},error:{pick:'加载失败，未加载模型',line:'本地模型加载失败，当前没有可用模型'},empty:{pick:'未加载模型',line:'当前未加载模型'}};
 function sdLoaded(){const s=sdCatalog.status||{},cli=s.origin=='command_line'||!!(s.runtime_recipe&&s.runtime_recipe.id=='@command-line'),st=s.state||((s.recipe||cli)?'ready':'empty');
@@ -170,7 +174,7 @@ function sdLoaded(){const s=sdCatalog.status||{},cli=s.origin=='command_line'||!
  return{value:'',text:SD_STATE.empty.pick,state:st}}
 function sdRecipeName(id){const r=sdCatalog.recipes.find(x=>x.id==id);return r&&r.name||id||''}
 function sdLoadedName(){const l=sdLoaded();return l.value&&l.value!='@command-line'?sdRecipeName(l.value):''}
-function sdRender(){const sel=$('#cfRecipe');if(!sel)return;const loaded=sdLoaded(),opts=[];
+function sdRender(){const wrap=$('#cfSdW');if(wrap)wrap.hidden=!isLocal(cfg.prov)||sdCatalog.native===false;if(!wrap||wrap.hidden)return;const sel=$('#cfRecipe');if(!sel)return;const loaded=sdLoaded(),opts=[];
  if(loaded.value=='@command-line'||(loaded.value&&!sdCatalog.recipes.some(r=>r.id==loaded.value))){const o=document.createElement('option');o.value=loaded.value||'@command-line';o.textContent=loaded.text+(loaded.value=='@command-line'?'':'（不在配方目录）');o.disabled=true;opts.push(o)}
  sdCatalog.recipes.forEach(r=>{if(r.id=='@command-line')return;const o=document.createElement('option');o.value=r.id;o.textContent=r.name||r.id;opts.push(o)});
  if(!loaded.value){const o=document.createElement('option');o.value='';o.textContent=loaded.text;o.disabled=true;opts.unshift(o)}
@@ -184,21 +188,26 @@ function sdRender(){const sel=$('#cfRecipe');if(!sel)return;const loaded=sdLoade
  const btn=$('#cfRecipeLoad');if(btn){const can=!sdCatalog.loading&&!!pend&&sdCatalog.recipes.some(r=>r.id==pend);btn.disabled=!can;btn.textContent=sdCatalog.loading&&sdCatalog.loadingId?'正在加载…':can?'加载 '+sdRecipeName(pend):'加载此配方'}}
 async function sdRead(){if(sdCatalog.reading)return;sdCatalog.reading=true;const btn=$('#cfRecipeRefresh');if(btn)btn.disabled=true;msg('正在读取本地配方、模型目录与状态…');
  try{const [catRes,statusRes,modelRes]=await Promise.allSettled([sdNative('recipes','GET'),sdStatus(),readModels()]);
+  if([catRes,statusRes].some(x=>x.status==='rejected'&&x.reason&&x.reason.unsupported))sdCatalog.native=false;
+  else if(catRes.status==='fulfilled'&&statusRes.status==='fulfilled')sdCatalog.native=true;
   if(catRes.status==='fulfilled')sdCatalog.recipes=(catRes.value&&catRes.value.recipes||[]).filter(r=>r&&r.id);
   const keep=sdCatalog.pending&&sdCatalog.pending!=sdLoaded().value&&sdCatalog.recipes.some(r=>r.id==sdCatalog.pending);
   sdCatalog.pending=keep?sdCatalog.pending:'';
   sdRender();
   const failed=[catRes,statusRes,modelRes].find(x=>x.status==='rejected');
-  if(failed)msg(nice(failed.reason),1);else msg('已读取本地配方、模型目录与状态')}
+  if([catRes,statusRes].some(x=>x.status==='rejected'&&x.reason&&x.reason.unsupported))msg('此服务端未提供 sd.cpp 原生配方管理，已改用 OpenAI 兼容模型目录。',1);
+  else if(failed)msg(nice(failed.reason),1);else msg('已读取本地配方、模型目录与状态')}
  catch(e){msg(nice(e),1)}finally{sdCatalog.reading=false;if(btn)btn.disabled=sdCatalog.loading}}
 // 服务端重扫时跳过的配方条目 → 用户可读的提示（不静默丢弃）
 function sdRescanNotice(errors){const list=(Array.isArray(errors)?errors:errors?[errors]:[]).filter(Boolean);if(!list.length)return'';
  const one=e=>{if(typeof e=='string')return e;if(typeof e!='object')return String(e);const f=e.file||e.path||e.recipe||'',m=e.message||e.error||e.reason||'';return (f?f+'：':'')+(m||JSON.stringify(e))};
  return '重扫发现 '+list.length+' 个无效配方：'+list.map(e=>String(one(e)).slice(0,120)).join('；')}
 // 刷新按钮：先让服务端重扫磁盘，再重读配方目录与已加载模型（顺序固定）
-async function sdRefresh(){if(sdCatalog.reading||sdCatalog.rescanning)return;sdCatalog.rescanning=true;const btn=$('#cfRecipeRefresh');if(btn)btn.disabled=true;msg('正在重扫本地配方与模型文件…');
+async function sdRefresh(){if(sdCatalog.reading||sdCatalog.rescanning)return;sdCatalog.rescanning=true;const btn=$('#cfRecipeRefresh');if(btn)btn.disabled=true;
+ if(sdCatalog.native===false){msg('此服务端不支持配方重扫，正在重新读取模型目录…');try{await readModels();msg('已重新读取模型目录')}catch(e){msg(nice(e),1)}finally{sdCatalog.rescanning=false;if(btn)btn.disabled=sdCatalog.reading||sdCatalog.loading}return}
+ msg('正在重扫本地配方与模型文件…');
  try{const j=await sdNative('models/refresh','POST',{},null,'refresh');const note=sdRescanNotice(j&&j.errors);await sdRead();if(note)msgAdd(note,1)}
- catch(e){msg(nice(e),1)}finally{sdCatalog.rescanning=false;if(btn)btn.disabled=sdCatalog.reading||sdCatalog.loading}}
+ catch(e){if(e.unsupported||e.status===404){sdCatalog.native=false;sdRender();msg('此服务端不支持配方重扫，已改用 OpenAI 兼容模型目录。',1)}else msg(nice(e),1)}finally{sdCatalog.rescanning=false;if(btn)btn.disabled=sdCatalog.reading||sdCatalog.loading}}
 // 读一次服务器模型状态并写回本地状态（读目录与校正共用这一条路径）
 async function sdStatus(){const st=await sdNative('models/status','GET');if(st&&Object.keys(st).length)sdCatalog.status=st;else if(!sdCatalog.status)sdCatalog.status={};return sdCatalog.status}
 // 失败后重新读一次服务器状态：选择器只显示服务器实际在用的配方

@@ -10,14 +10,14 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
   const READY = { state: 'ready', recipe: 'flux1-dev', models: { diffusion_model: 'diffusion_models/flux1-dev.gguf' }, error: null, revision: 1 };
   const CLI = { state: 'ready', origin: 'command_line', recipe: null, runtime_recipe: { id: '@command-line', name: 'Command line' }, models: { model: 'checkpoints/cli.gguf' }, error: null, revision: 1 };
   const MODELS = { data: [{ id: 'Flux-2-Klein-4B-Q4_K_S' }, { id: 'sd-cpp-local' }] };
-  let catalog = { recipes: RECIPES, errors: [] }, modelStatus = READY, catalogReply = null, modelsReply = null, loadReply = null, loadDelay = 0, statusReply = null, loadStatus = null, refreshResult = {}, refreshReply = null;
+  let catalog = { recipes: RECIPES, errors: [] }, modelStatus = READY, catalogReply = null, modelsReply = null, loadReply = null, loadDelay = 0, statusReply = null, loadStatus = null, refreshResult = {}, refreshReply = null, nativeHtml = false;
   const handler = async route => {
     const req = route.request(), u = req.url(), H = { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
     if (req.method() == 'OPTIONS') return route.fulfill({ status: 204, headers: H });
     hits.push({ url: u, method: req.method(), headers: req.headers(), body: req.postData() || '' });
     if (u.includes('/api/proxy')) return route.fulfill({ status: 403, headers: H, body: '{"error":{"message":"proxy should not be used"}}' });
-    if (/\/sdcpp\/v1\/recipes$/.test(u)) return route.fulfill({ status: catalogReply ? catalogReply.status : 200, headers: H, body: catalogReply && catalogReply.body !== undefined ? catalogReply.body : JSON.stringify(catalog) });
-    if (/\/sdcpp\/v1\/models\/status$/.test(u)) return route.fulfill({ status: 200, headers: H, body: JSON.stringify(statusReply || modelStatus) });
+    if (/\/sdcpp\/v1\/recipes$/.test(u)) return nativeHtml ? route.fulfill({ status: 200, headers: { ...H, 'content-type': 'text/html' }, body: '<!doctype html><html><body>Lemonade</body></html>' }) : route.fulfill({ status: catalogReply ? catalogReply.status : 200, headers: H, body: catalogReply && catalogReply.body !== undefined ? catalogReply.body : JSON.stringify(catalog) });
+    if (/\/sdcpp\/v1\/models\/status$/.test(u)) return nativeHtml ? route.fulfill({ status: 200, headers: { ...H, 'content-type': 'text/html' }, body: '<!doctype html><html><body>Lemonade</body></html>' }) : route.fulfill({ status: 200, headers: H, body: JSON.stringify(statusReply || modelStatus) });
     if (/\/v1\/models$/.test(u)) return route.fulfill({ status: modelsReply ? modelsReply.status || 200 : 200, headers: H, body: modelsReply && modelsReply.body !== undefined ? modelsReply.body : JSON.stringify(MODELS) });
     if (/\/sdcpp\/v1\/models\/refresh$/.test(u)) return route.fulfill({ status: refreshReply ? refreshReply.status || 200 : 200, headers: H, body: refreshReply && refreshReply.body !== undefined ? refreshReply.body : JSON.stringify(refreshResult) });
     if (/\/sdcpp\/v1\/models\/load$/.test(u)) {
@@ -101,6 +101,20 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     await p.fill('#cfModel', 'Flux-2-Klein-4B-Q4_K_S');
     await p.click('#cfSave');
     await c.close() }
+
+  // —— 非 sd.cpp 本地服务：隐藏原生配方管理，只用 OpenAI 模型目录
+  { catalog = { recipes: RECIPES, errors: [] }; modelStatus = READY; nativeHtml = true;
+    const cfg = Object.assign({}, SD_CFG, { model: 'stale-local-model' });
+    const { c, p } = await setup(cfg); hits = [];
+    await p.click('#wbCfg');
+    await waitModels(p);
+    await p.waitForFunction(() => { const e = document.querySelector('#cfSdW'); return e && e.hidden }, null, { timeout: 5000 }).catch(() => {});
+    R.push(['non-native local server hides sd.cpp recipe UI', await p.$eval('#cfSdW', e => e.hidden), '']);
+    const opts = await p.$$eval('#cfModels option', es => es.map(e => e.value)).catch(() => []);
+    R.push(['non-native local server still lists OpenAI models', opts.length === MODELS.data.length && MODELS.data.every((m, i) => opts[i] === m.id), JSON.stringify(opts)]);
+    R.push(['model selection falls back to a listed model', (await p.$eval('#cfModel', e => e.value).catch(() => '')) === 'Flux-2-Klein-4B-Q4_K_S', await p.$eval('#cfModel', e => e.value).catch(() => '')]);
+    R.push(['unsupported native refresh is not called', !hits.some(h => /\/sdcpp\/v1\/models\/refresh$/.test(h.url)), hits.map(h => h.method + ' ' + h.url).join(' | ')]);
+    nativeHtml = false; await c.close() }
 
   // —— 模型目录读取失败：明确报错，不阻塞生图
   { catalog = { recipes: RECIPES, errors: [] }; modelStatus = READY; modelsReply = { status: 500, body: JSON.stringify({ error: { message: 'model list unavailable' } }) };
