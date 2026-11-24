@@ -34,7 +34,7 @@
 | **素材库** | 姿势（多角度线稿）、深度姿势、服装（按季节和类型分类）、动画服装（动画风穿搭，含 CharaDB 并入部分）、人像（脸模参考，CC0），以及表情、发型、历代服装、场景、光影、道具、家具七个扩展库。每张图都有中文描述；深度姿势另附日文原名 |
 | **搜索与筛选** | 中英文关键词、分类、排序、随机一张；每个素材有独立详情页，方便分享 |
 | **试穿工作台** | 上传人物照，选服装和姿势，生成试穿图，或不用照片直接出图；一次可出多张，有前后对比、单张下载和打包下载 |
-| **多家服务商** | OpenAI、Gemini、豆包 Seedream、OpenAI 兼容的自定义中转，见下表 |
+| **多家服务商** | OpenAI、Gemini、豆包 Seedream、本地 sd.cpp、OpenAI 兼容的自定义中转，见下表 |
 | **生成记录** | 独立记录页：保存在本机 IndexedDB（上限 200 条），可全选批量打包下载、导出 ZIP（含每张图的提示词与参数）、单张重新生成，大图模式可与原图前后对比 |
 | **清楚的报错** | 密钥无效、限流、超时、被安全审核拦截等情况会分别说明，并给出下一步可以怎么做 |
 | **减少误拦截** | 默认开启。发送前把提示词改写成中性的电商试穿描述，不改变服装和姿势；关闭后按原样发送 |
@@ -51,6 +51,17 @@
 | Gemini | Google AI Studio 的 API Key | gemini-2.5-flash-image | 即 Nano Banana |
 | 豆包 Seedream | 火山方舟 API Key | doubao-seedream-4-0-250828 | 国内直连，默认经本站代理以解决跨域 |
 | 自定义中转 | Base URL + Key + 模型名 | 自填 | OpenAI 兼容（edits / generations）或 Gemini 协议（`models/:generateContent`）；代理开关对中转同样生效，未勾选时代理直连，中转地址可用任意端口 |
+| 本地 sd.cpp | 本机运行的 sd-server（默认监听 127.0.0.1:1234），只绑定本机地址 | `sd-cpp-local`（选本机配方） | 不需要 API Key，也不经过本站代理；从浏览器直连本机 |
+
+回环地址（`127.0.0.1` / `localhost`）在 Chrome、Firefox 中通常被视为可信来源，HTTPS 页面调用本地 HTTP 服务不会被当作混合内容拦截；Safari、旧版浏览器或企业策略仍可能拦截，较新的 Chrome 还可能要求你允许「本地网络访问」。遇到这类拦截时，请用 http:// 打开 PoseWear（例如 http://localhost:8787），或为本地服务配置 HTTPS。sd-server 没有鉴权，请保持只监听本机地址，不要暴露到局域网或公网。
+
+### 本地 API 的跨域要求
+
+从 PoseWear 页面访问 `127.0.0.1` 属于跨源请求。CORS 由**本地服务**用响应头声明、由浏览器强制执行；本站没有“开启 CORS”的开关。原版 sd-server 默认回显请求的 `Origin`、允许所有方法与头，并对 `OPTIONS` 预检返回 204，因此无需额外配置。若换成自研或第三方本地服务，请让它在响应里给出 `Access-Control-Allow-Origin`（回显本站 Origin 或 `*`）、`Access-Control-Allow-Methods: GET, POST, OPTIONS`、`Access-Control-Allow-Headers: Content-Type`，并能处理 `OPTIONS` 预检。JSON 生图与原生模型管理请求带 `Content-Type: application/json`，会触发预检；multipart 参考图请求不触发。PoseWear 不发送凭据，不能同时使用 `Allow-Credentials: true` 和 `Allow-Origin: *`。
+
+本站一侧的对应配置是构建时 CSP 的 `connect-src` 白名单（已放行 `http://127.0.0.1:*` 和 `http://localhost:*`）与本地服务商固定直连、代理关闭；两者都不是用户开关，本站代理也拒绝内网地址，不能用来代替 CORS。三种“连不上”要分开看：CORS 看本地服务响应头与预检，混合内容看页面与本地服务的协议，CSP 看站点白名单。
+
+参考图会被严格发送；所选模型只有提供基于参考图的生图能力时才会据此生成结果，部分模型可能报错或忽略图像，详见 [sd.cpp API 契约的模型能力矩阵](docs/sdcpp-api.md)。
 
 ## 更新日志
 

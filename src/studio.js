@@ -2,10 +2,13 @@
 (()=>{const A=window.APP;if(!A)return;const $=s=>document.querySelector(s),$$=s=>document.querySelectorAll(s),esc=A.esc,toast=A.toast;
 const LS=k=>{try{return JSON.parse(localStorage[k]||'null')}catch(e){return null}},SV=(k,v)=>{try{localStorage[k]=JSON.stringify(v)}catch(e){}};
 // ---------- 服务商 ----------
-const PROV={openai:{name:'OpenAI',base:'https://api.openai.com/v1',model:'gpt-image-1',models:['gpt-image-1','gpt-image-1-mini','gpt-image-2','dall-e-2']},
- gemini:{name:'Gemini',base:'https://generativelanguage.googleapis.com/v1beta',model:'gemini-2.5-flash-image',models:['gemini-2.5-flash-image','gemini-3-pro-image-preview','gemini-3.1-flash-image']},
- seedream:{name:'豆包 Seedream',base:'https://ark.cn-beijing.volces.com/api/v3',model:'doubao-seedream-5-5-261028',models:['doubao-seedream-5-5-261028','doubao-seedream-5-0-flash-260915','doubao-seedream-4-5-251128','doubao-seedream-4-0-250828']},
- custom:{name:'自定义中转',base:'',model:'gpt-image-1',models:['gpt-image-1','gpt-image-2','grok-imagine-image-2.0','gemini-2.5-flash-image','flux-kontext-pro','qwen-image-edit','doubao-seedream-4-0-250828']}};
+const SDCPP='sdcpp';
+const PROV={openai:{name:'OpenAI',base:'https://api.openai.com/v1',model:'gpt-image-1',models:['gpt-image-1','gpt-image-1-mini','gpt-image-2','dall-e-2'],proto:'edits',keyMode:'bearer'},
+ gemini:{name:'Gemini',base:'https://generativelanguage.googleapis.com/v1beta',model:'gemini-2.5-flash-image',models:['gemini-2.5-flash-image','gemini-3-pro-image-preview','gemini-3.1-flash-image'],proto:'gemini',keyMode:'google',rootMode:'v1beta'},
+ seedream:{name:'豆包 Seedream',base:'https://ark.cn-beijing.volces.com/api/v3',model:'doubao-seedream-5-5-261028',models:['doubao-seedream-5-5-261028','doubao-seedream-5-0-flash-260915','doubao-seedream-4-5-251128','doubao-seedream-4-0-250828'],proto:'seedream',keyMode:'bearer',rootMode:'plain',forcedProxy:true,sizeTable:'SEEDREAM'},
+ custom:{name:'自定义中转',base:'',model:'gpt-image-1',models:['gpt-image-1','gpt-image-2','grok-imagine-image-2.0','gemini-2.5-flash-image','flux-kontext-pro','qwen-image-edit','doubao-seedream-4-0-250828'],custom:true,keyMode:'bearer'},
+ [SDCPP]:{name:'本地 sd.cpp',base:'http://127.0.0.1:1234/v1',model:'sd-cpp-local',proto:SDCPP,keyMode:'none',needsKey:false,proxy:false,local:true,b64Only:true,fallback:'strict',field:'image[]'}};
+const provInfo=p=>PROV[p]||{},isLocal=p=>!!provInfo(p).local,needsKey=p=>provInfo(p).needsKey!==false,proxyAllowed=p=>provInfo(p).proxy!==false,keyMode=p=>provInfo(p).keyMode||'bearer',rootMode=p=>provInfo(p).rootMode||'v1',isCustom=p=>!!provInfo(p).custom,forcesProxy=p=>!!provInfo(p).forcedProxy,fallbackMode=p=>provInfo(p).fallback||'tolerant',b64OnlyMode=p=>!!provInfo(p).b64Only;
 const cfg=Object.assign({prov:'openai',base:'',key:'',model:'',field:'image[]',proto:'edits',proxy:false},LS('wbCfg')||{});
 // ---------- 预设 ----------
 const CHARS=[['asia','东亚女性','an adult East Asian woman in her mid-20s, long black hair, natural makeup, slim build','一位二十多岁的成年东亚女性，黑色长发，自然淡妆，身材纤细'],
@@ -22,9 +25,11 @@ const W={mode:LS('wbMode')||'tryon',persons:[],garments:[],poses:[],exprs:[],cha
 const g0=LS('wbSel')||{};
 // ---------- 工具 ----------
 const normBase=b=>(b||'').trim().replace(/\/+$/,'');
-function root(){let b=normBase(cfg.base)||PROV[cfg.prov].base;if(cfg.prov=='gemini')return/\/v1(beta|alpha)?$/.test(b)?b:b+'/v1beta';if(cfg.prov=='seedream')return b;return/\/v\d+$/.test(b)?b:b+'/v1'}
-const modelOf=()=>(cfg.model||'').trim()||PROV[cfg.prov].model;
-const proto=()=>cfg.prov=='openai'?'edits':cfg.prov=='custom'?cfg.proto:cfg.prov;
+function root(){let b=normBase(cfg.base)||provInfo(cfg.prov).base,mode=rootMode(cfg.prov);if(mode=='v1beta')return/\/v1(beta|alpha)?$/.test(b)?b:b+'/v1beta';if(mode=='plain')return b;return/\/v\d+$/.test(b)?b:b+'/v1'}
+const modelOf=()=>(cfg.model||'').trim()||provInfo(cfg.prov).model;
+const proto=()=>provInfo(cfg.prov).proto||cfg.proto;
+function provName(){return PROV[cfg.prov].name}
+function provLabel(){const ok=!needsKey(cfg.prov)||!!cfg.key;if(!ok)return'未配置 API';return isLocal(cfg.prov)?provName()+(sdLoadedName()?' · '+sdLoadedName():''):provName()+' · '+modelOf()}
 function loadImg(src){return new Promise((r,j)=>{const i=new Image();i.onload=()=>r(i);i.onerror=()=>j(Error('图片读取失败'));i.src=src})}
 async function toJpeg(src,max=1536){const i=await loadImg(src);let w=i.naturalWidth,h=i.naturalHeight,s=Math.min(1,max/Math.max(w,h));w=Math.round(w*s);h=Math.round(h*s);
  const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,w,h);x.drawImage(i,0,0,w,h);return new Promise(r=>c.toBlob(b=>r({blob:b,w,h}),'image/jpeg',.92))}
@@ -72,10 +77,10 @@ function render(){const G=isGen();$$('[data-mode]').forEach(b=>b.classList.toggl
  $('#wbBatch').hidden=W.poses.length<2;$$('[data-bm]').forEach(b=>b.classList.toggle('on',b.dataset.bm==W.bm));$('#wbAllAng').hidden=W.poses.length!=1||!A.ITEMS[(W.poses[0]||{}).k];
  $('#wbStyles').innerHTML=STYLES.map(s=>`<button class="chip ${W.style==s[0]?'on':''}" data-style="${s[0]}">${s[1]}</button>`).join('');$('#wbKeepBg').checked=W.keepBg;$('#wbKeepBg').closest('label').hidden=G||!hasPerson();
  $$('[data-pl]').forEach(b=>b.classList.toggle('on',b.dataset.pl==W.pl));
- const ok=!!cfg.key;$('#wbDot').className='dot'+(ok?' on':'');$('#wbProv').textContent=ok?PROV[cfg.prov].name+' · '+modelOf():'未配置 API';$('#wbDot2').className='dot'+(ok?' on':'');$('#wbProv2').textContent=ok?PROV[cfg.prov].name:'未配置 API';$('#wbOnb').hidden=ok;
+ const ok=!needsKey(cfg.prov)||!!cfg.key;$('#wbDot').className='dot'+(ok?' on':'');$('#wbProv').textContent=provLabel();$('#wbDot2').className='dot'+(ok?' on':'');$('#wbProv2').textContent=ok?provName():'未配置 API';$('#wbOnb').hidden=ok;
  const dn=[G?true:hasPerson(),W.garments.length>0,W.poses.length>0,!!(W.style||$('#wbExtra').value)];$$('.step[data-s]').forEach(e=>e.classList.toggle('done',dn[e.dataset.s-1]));
  const jobs=nJobs();$('#wbGo').textContent='生成';$('#wbEst').textContent=`将生成 ${jobs} 张`;
- const miss=[!G&&!hasPerson()&&'人物照片',!W.garments.length&&'服装',!ok&&'API 密钥'].filter(Boolean);$('#wbHint').textContent=miss.length?'还缺：'+miss.join('、'):'每张约半分钟';$('#wbHint').classList.toggle('miss',!!miss.length);const need=[!G&&!hasPerson()&&'上传人物照片',!W.garments.length&&'选择服装'].filter(Boolean);if(!W.busy){$('#wbGo').disabled=!!need.length;$('#wbGo').title=need.length?'请先'+need.join('、'):'';if(need.length)$('#wbGo').textContent='请先'+need[0]}$$('.flow [data-f]').forEach(e=>e.classList.toggle('on',e.dataset.f<4?dn[e.dataset.f-1]&&(e.dataset.f!=3||W.poses.length>0):!need.length));
+ const noRefsOk=isLocal(cfg.prov)&&G;const miss=[!G&&!hasPerson()&&'人物照片',!noRefsOk&&!W.garments.length&&'服装',!ok&&'API 密钥'].filter(Boolean);$('#wbHint').textContent=miss.length?'还缺：'+miss.join('、'):'每张约半分钟';$('#wbHint').classList.toggle('miss',!!miss.length);const need=[!G&&!hasPerson()&&'上传人物照片',!noRefsOk&&!W.garments.length&&'选择服装'].filter(Boolean);if(!W.busy){$('#wbGo').disabled=!!need.length;$('#wbGo').title=need.length?'请先'+need.join('、'):'';if(need.length)$('#wbGo').textContent='请先'+need[0]}$$('.flow [data-f]').forEach(e=>e.classList.toggle('on',e.dataset.f<4?dn[e.dataset.f-1]&&(e.dataset.f!=3||W.poses.length>0):!need.length));
  SV('wbSel',{g:W.garments.filter(g=>g.kind=='lib').map(g=>g.k),p:W.poses.filter(p=>p.kind=='lib').map(p=>[p.k,p.ai]),e:W.exprs.filter(g=>g.kind=='lib').map(g=>[g.k,g.ai])});reprompt()}
 const nJobs=()=>(W.poses.length>1&&W.bm=='each'?W.poses.length:1)*(+$('#wbN').value||1);
 // ---------- 上传 ----------
@@ -132,27 +137,109 @@ function neutralize(p){let t=p;for(const [a,b] of NEUTRAL)t=t.replace(a,b?'\x01'
  t=t.replace(/\b(with|and|in)\s+\x02\s+(?:and|with)\b/gi,'$1').replace(/\x01\x02*\x01/g,'、').replace(/\x01\s+\x01/g,' ').replace(/[\x01]/g,'').replace(/\s*\x02\s*/g,' ')
   .replace(/(^|[，,、；;：:。.\n])\s*(?:and|with|,)?\s*(?=[，,、；;。.\n]|$)/g,'$1').replace(/([，、；])[，、；]+/g,'$1').replace(/([,;])\s*[,;]+/g,'$1').replace(/[ \t]{2,}/g,' ').replace(/\s+([,.;，。；、])/g,'$1').replace(/^[，,、]\s*|[，,、]\s*$/gm,'').replace(/[,，、]\s*([.。;；])/g,'$1');
  const zh=/[\u4e00-\u9fa5]/.test(t.slice(0,40))&&W.pl!='en';return FRAME[zh?'zh':'en']+'\n'+t}
-function cfgFill(){$$('[name=prov]').forEach(r=>r.checked=r.value==cfg.prov);const P=PROV[cfg.prov];$('#cfBase').value=cfg.base;$('#cfBase').placeholder=P.base||'https://你的中转地址/v1';$('#cfKey').value=cfg.key;$('#cfKey').placeholder=cfg.prov=='gemini'?'AIza…':'sk-… / 方舟 API Key';
- $('#cfModel').value=cfg.model;$('#cfModel').placeholder=P.model;$('#cfModels').innerHTML=P.models.map(m=>`<option value="${m}">`).join('');$('#cfField').value=cfg.field;$('#cfProto').value=cfg.proto;$('#cfProtoW').hidden=cfg.prov!='custom';$('#cfFieldW').hidden=!(cfg.prov=='custom'&&cfg.proto=='edits');$('#cfProxy').checked=cfg.proxy;$('#cfHelp').innerHTML=({openai:'在 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a> 创建密钥；gpt-image-1 需要已验证的组织。',gemini:'在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 免费获取 API Key（AIza 开头）。',seedream:'在 <a href="https://console.volcengine.com/ark" target="_blank" rel="noopener">火山方舟控制台</a> 开通 Seedream 模型并创建 API Key；会自动走本站代理。',custom:'填写中转商提供的 Base URL（通常以 /v1 结尾）与密钥，并按中转文档选择接口协议。'})[cfg.prov]||'';$('#cfMsg').textContent='';$('#cfMsg').className='fine'}
-function cfgRead(){return{prov:($('[name=prov]:checked')||{}).value||'openai',base:$('#cfBase').value.trim(),key:$('#cfKey').value.trim(),model:$('#cfModel').value.trim(),field:$('#cfField').value,proto:$('#cfProto').value,proxy:$('#cfProxy').checked}}
-const cfgOpen=()=>{cfgFill();$('#cfg').hidden=false;document.body.style.overflow='hidden'},cfgClose=()=>{$('#cfg').hidden=true;document.body.style.overflow=''};
+function cfgFill(){$$('[name=prov]').forEach(r=>r.checked=r.value==cfg.prov);const P=PROV[cfg.prov],local=isLocal(cfg.prov);$('#cfBase').value=cfg.base;$('#cfBase').placeholder=P.base||'https://你的中转地址/v1';$('#cfKey').value=cfg.key;$('#cfKey').placeholder=keyMode(cfg.prov)=='google'?'AIza…':'sk-… / 方舟 API Key';
+ $('#cfModel').value=cfg.model;$('#cfModel').placeholder=P.model;$('#cfModel').hidden=local;$('#cfModelSel').hidden=!local;renderModels();$('#cfField').value=cfg.field;$('#cfProto').value=cfg.proto;$('#cfProtoW').hidden=!isCustom(cfg.prov);$('#cfFieldW').hidden=!(isCustom(cfg.prov)&&cfg.proto=='edits');
+ $('#cfKeyW').hidden=local;$('#cfProxyW').hidden=local;$('#cfProxy').disabled=local;$('#cfProxy').checked=local?false:cfg.proxy;$('#cfSdW').hidden=!local;
+ $('#cfHelp').innerHTML=({openai:'在 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a> 创建密钥；gpt-image-1 需要已验证的组织。',gemini:'在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 免费获取 API Key（AIza 开头）。',seedream:'在 <a href="https://console.volcengine.com/ark" target="_blank" rel="noopener">火山方舟控制台</a> 开通 Seedream 模型并创建 API Key；会自动走本站代理。',custom:'填写中转商提供的 Base URL（通常以 /v1 结尾）与密钥，并按中转文档选择接口协议。',[SDCPP]:'连接你本机运行的 stable-diffusion.cpp server（sd-server），默认监听 127.0.0.1:1234。不需要 API Key，也不经过本站代理；请保持 sd-server 只绑定本机地址。HTTPS 页面会拦截本地 HTTP（混合内容），请用 http:// 打开本站或为本地服务配置 HTTPS。'})[cfg.prov]||'';$('#cfMsg').textContent='';$('#cfMsg').className='fine'}
+function cfgRead(){const prov=($('[name=prov]:checked')||{}).value||'openai',modelEl=isLocal(prov)?$('#cfModelSel'):$('#cfModel');return{prov,base:$('#cfBase').value.trim(),key:$('#cfKey').value.trim(),model:modelEl.value.trim(),field:$('#cfField').value,proto:$('#cfProto').value,proxy:proxyAllowed(prov)?$('#cfProxy').checked:false}}
+const cfgOpen=()=>{cfgFill();$('#cfg').hidden=false;document.body.style.overflow='hidden';if(isLocal(cfg.prov))sdRead()},cfgClose=()=>{$('#cfg').hidden=true;document.body.style.overflow=''};
 $('#wbCfg').onclick=cfgOpen;$('#wbCfg2').onclick=cfgOpen;$('#wbOnbGo').onclick=cfgOpen;$('#cfgX').onclick=cfgClose;$('#cfg').addEventListener('click',e=>{if(e.target.id=='cfg')cfgClose()});
-$$('[name=prov]').forEach(r=>r.onchange=()=>{const o=cfgRead();Object.assign(cfg,o,{base:'',model:''});if(o.prov=='seedream')cfg.proxy=true;cfgFill();if(o.prov=='seedream')msg('火山方舟接口不允许浏览器跨域，已开启本站代理')});
+$('#cfRecipeRefresh').onclick=()=>sdRefresh();
+$('#cfRecipe').onchange=e=>{const v=e.target.value;sdCatalog.pending=v&&v!=sdLoaded().value?v:'';sdRender()};
+$('#cfRecipeLoad').onclick=()=>sdLoad();
+$('#cfRecipePending').onclick=e=>{if(e.target.closest('[data-sd-cancel]')){sdCatalog.pending='';sdRender()}};
+$$('[name=prov]').forEach(r=>r.onchange=()=>{const o=cfgRead();Object.assign(cfg,o,isLocal(o.prov)?{base:PROV[SDCPP].base,model:PROV[SDCPP].model,proxy:false}:{base:'',model:''});if(forcesProxy(o.prov))cfg.proxy=true;cfgFill();if(forcesProxy(o.prov))msg('火山方舟接口不允许浏览器跨域，已开启本站代理')});
 $('#cfProto').onchange=()=>{cfg.proto=$('#cfProto').value;$('#cfFieldW').hidden=cfg.proto!='edits'};
 $('#cfEye').onclick=()=>{const k=$('#cfKey');k.type=k.type=='password'?'text':'password';$('#cfEye').textContent=k.type=='password'?'显示':'隐藏'};
-$('#cfSave').onclick=()=>{const o=cfgRead();if(o.prov=='custom'&&!o.base)return msg('自定义中转需要填写 Base URL',1);Object.assign(cfg,o);SV('wbCfg',cfg);render();cfgClose();toast('API 设置已保存在本机')};
+$('#cfSave').onclick=()=>{const o=cfgRead();if(isCustom(o.prov)&&!o.base)return msg('自定义中转需要填写 Base URL',1);Object.assign(cfg,o);SV('wbCfg',cfg);render();cfgClose();toast('API 设置已保存在本机')};
 $('#cfClr').onclick=()=>{cfg.key='';$('#cfKey').value='';SV('wbCfg',cfg);render();msg('已从本机清除密钥')};
 function msg(t,bad){const m=$('#cfMsg');m.textContent=t;m.className='fine '+(bad?'bad':'good')}
-$('#cfTest').onclick=async()=>{const o=cfgRead();if(!o.key)return msg('请先填写 API Key',1);if(o.prov=='custom'&&!o.base)return msg('请填写 Base URL',1);const old=Object.assign({},cfg);Object.assign(cfg,o);msg('正在连接…');
- try{const g=proto()=='gemini',url=g?`${root()}/models/${encodeURIComponent(modelOf())}`:`${root()}/models`;const r=await call(url,{method:'GET',headers:auth()});const j=await r.json().catch(()=>null);
-  if(!r.ok){if(cfg.prov=='seedream'&&r.status==404){if((r.headers.get('content-type')||'').includes('text/html')){const e=Error('');e.zh='本站代理未生效：/api/proxy 返回的是网站静态页面而不是接口响应，Seedream 暂时连不上，请稍后再试或联系站长';throw e}return msg('地址可达、密钥已被接受（方舟不提供模型列表接口，可直接生成测试）')}throw await apiErr(r,j)}
+function msgAdd(t,bad){const m=$('#cfMsg');if(m){m.textContent=(m.textContent||'')+(m.textContent?'；':'')+t;if(bad)m.className='fine bad'}}
+// ---------- 本地模型发现与加载（sd.cpp 原生 API，与生图接口分开） ----------
+function nativeRoot(){const b=normBase(cfg.base)||PROV[cfg.prov].base;return b.replace(/\/v1(?:beta|alpha)?$/,'')}
+let sdCatalog={recipes:[],models:[],status:null,native:null,reading:false,rescanning:false,pending:null,loading:false,loadingId:null};
+function renderModels(){const dl=$('#cfModels'),sel=$('#cfModelSel');if(!dl||!sel)return;
+ if(isLocal(cfg.prov)){sel.replaceChildren(...sdCatalog.models.map(id=>{const o=document.createElement('option');o.value=id;o.textContent=id;return o}));if(cfg.model&&sdCatalog.models.includes(cfg.model))sel.value=cfg.model}
+ else dl.replaceChildren(...(PROV[cfg.prov].models||[]).map(id=>{const o=document.createElement('option');o.value=id;return o}))}
+async function readModels(){const r=await call(`${root()}/models`,{method:'GET',headers:auth()});const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,'model');const ids=[...new Set((j&&j.data||[]).filter(m=>m&&m.id&&(m.labels||[]).includes('image')).map(m=>m.id))];sdCatalog.models=ids;renderModels();
+ if(isLocal(cfg.prov)&&ids.length&&(!cfg.model||!ids.includes(cfg.model))){cfg.model=ids[0];$('#cfModelSel').value=cfg.model;SV('wbCfg',cfg);msg('当前模型不在图像模型目录中，已改用 '+cfg.model)}
+ return ids}
+async function sdNative(path,method,body,signal,scope){const opt=method=='POST'?{method:'POST',signal,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body||{})}:{method:'GET',signal,headers:auth()};const r=await call(`${nativeRoot()}/sdcpp/v1/${path}`,opt);const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,scope||(method=='POST'?'load':'model'));
+ if(!j||typeof j!='object'||Array.isArray(j)||(r.headers.get('content-type')||'').toLowerCase().includes('text/html')){const e=Error('This server does not expose the sd.cpp native model-management API');e.unsupported=true;e.zh='此服务端未提供 sd.cpp 原生模型管理端点，已改用 OpenAI 兼容模型目录。';throw e}
+ return j}
+// 服务器模型状态 → 界面文案（下拉框占位与状态提示的唯一来源）
+const SD_STATE={loading:{pick:'正在加载模型…',line:'本地模型正在加载…'},switching:{pick:'正在加载模型…',line:'模型切换中…'},error:{pick:'加载失败，未加载模型',line:'本地模型加载失败，当前没有可用模型'},empty:{pick:'未加载模型',line:'当前未加载模型'}};
+function sdLoaded(){const s=sdCatalog.status||{},cli=s.origin=='command_line'||!!(s.runtime_recipe&&s.runtime_recipe.id=='@command-line'),st=s.state||((s.recipe||cli)?'ready':'empty');
+ if(st!='ready'){const q=SD_STATE[st]||SD_STATE.empty;return{value:'',text:q.pick,state:st}}
+ if(cli)return{value:'@command-line',text:(s.runtime_recipe&&s.runtime_recipe.name||'Command line')+'（命令行预加载）',state:st};
+ if(s.recipe){const r=sdCatalog.recipes.find(x=>x.id==s.recipe);return{value:s.recipe,text:r&&r.name||s.recipe,state:st}}
+ return{value:'',text:SD_STATE.empty.pick,state:st}}
+function sdRecipeName(id){const r=sdCatalog.recipes.find(x=>x.id==id);return r&&r.name||id||''}
+function sdLoadedName(){const l=sdLoaded();return l.value&&l.value!='@command-line'?sdRecipeName(l.value):''}
+function sdRender(){const wrap=$('#cfSdW');if(wrap)wrap.hidden=!isLocal(cfg.prov)||sdCatalog.native===false;if(!wrap||wrap.hidden)return;const sel=$('#cfRecipe');if(!sel)return;const loaded=sdLoaded(),opts=[];
+ if(loaded.value=='@command-line'||(loaded.value&&!sdCatalog.recipes.some(r=>r.id==loaded.value))){const o=document.createElement('option');o.value=loaded.value||'@command-line';o.textContent=loaded.text+(loaded.value=='@command-line'?'':'（不在配方目录）');o.disabled=true;opts.push(o)}
+ sdCatalog.recipes.forEach(r=>{if(r.id=='@command-line')return;const o=document.createElement('option');o.value=r.id;o.textContent=r.name||r.id;opts.push(o)});
+ if(!loaded.value){const o=document.createElement('option');o.value='';o.textContent=loaded.text;o.disabled=true;opts.unshift(o)}
+ sel.replaceChildren(...opts);
+ if(opts.some(o=>o.value==loaded.value))sel.value=loaded.value;else if(opts.length)sel.selectedIndex=0;
+ const le=$('#cfLoaded');if(le&&sdCatalog.status){const st=sdCatalog.loading&&sdCatalog.loadingId?'switching':loaded.state,q=SD_STATE[st]||SD_STATE.empty;
+  le.textContent=(st=='ready'?'当前已加载：'+loaded.text:q.line)+(loaded.state=='error'&&sdCatalog.status.error?'：'+String(sdCatalog.status.error).slice(0,120):'')}
+ const pend=sdCatalog.pending&&sdCatalog.pending!=loaded.value?sdCatalog.pending:'';
+ const pn=$('#cfRecipePending');if(pn)pn.innerHTML=sdCatalog.loading&&sdCatalog.loadingId?'正在加载 '+esc(sdRecipeName(sdCatalog.loadingId))+'…':pend?'待加载：'+esc(sdRecipeName(pend))+' <button class="sm ghost" data-sd-cancel="1">取消</button>':'';
+ sel.disabled=sdCatalog.loading;
+ const btn=$('#cfRecipeLoad');if(btn){const can=!sdCatalog.loading&&!!pend&&sdCatalog.recipes.some(r=>r.id==pend);btn.disabled=!can;btn.textContent=sdCatalog.loading&&sdCatalog.loadingId?'正在加载…':can?'加载 '+sdRecipeName(pend):'加载此配方'}}
+async function sdRead(){if(sdCatalog.reading)return;sdCatalog.reading=true;const btn=$('#cfRecipeRefresh');if(btn)btn.disabled=true;msg('正在读取本地配方、模型目录与状态…');
+ try{const [catRes,statusRes,modelRes]=await Promise.allSettled([sdNative('recipes','GET'),sdStatus(),readModels()]);
+  if([catRes,statusRes].some(x=>x.status==='rejected'&&x.reason&&x.reason.unsupported))sdCatalog.native=false;
+  else if(catRes.status==='fulfilled'&&statusRes.status==='fulfilled')sdCatalog.native=true;
+  if(catRes.status==='fulfilled')sdCatalog.recipes=(catRes.value&&catRes.value.recipes||[]).filter(r=>r&&r.id);
+  const keep=sdCatalog.pending&&sdCatalog.pending!=sdLoaded().value&&sdCatalog.recipes.some(r=>r.id==sdCatalog.pending);
+  sdCatalog.pending=keep?sdCatalog.pending:'';
+  sdRender();
+  const failed=[catRes,statusRes,modelRes].find(x=>x.status==='rejected');
+  if([catRes,statusRes].some(x=>x.status==='rejected'&&x.reason&&x.reason.unsupported))msg('此服务端未提供 sd.cpp 原生配方管理，已改用 OpenAI 兼容模型目录。',1);
+  else if(failed)msg(nice(failed.reason),1);else msg('已读取本地配方、模型目录与状态')}
+ catch(e){msg(nice(e),1)}finally{sdCatalog.reading=false;if(btn)btn.disabled=sdCatalog.loading}}
+// 服务端重扫时跳过的配方条目 → 用户可读的提示（不静默丢弃）
+function sdRescanNotice(errors){const list=(Array.isArray(errors)?errors:errors?[errors]:[]).filter(Boolean);if(!list.length)return'';
+ const one=e=>{if(typeof e=='string')return e;if(typeof e!='object')return String(e);const f=e.file||e.path||e.recipe||'',m=e.message||e.error||e.reason||'';return (f?f+'：':'')+(m||JSON.stringify(e))};
+ return '重扫发现 '+list.length+' 个无效配方：'+list.map(e=>String(one(e)).slice(0,120)).join('；')}
+// 刷新按钮：先让服务端重扫磁盘，再重读配方目录与已加载模型（顺序固定）
+async function sdRefresh(){if(sdCatalog.reading||sdCatalog.rescanning)return;sdCatalog.rescanning=true;const btn=$('#cfRecipeRefresh');if(btn)btn.disabled=true;
+ if(sdCatalog.native===false){msg('此服务端不支持配方重扫，正在重新读取模型目录…');try{await readModels();msg('已重新读取模型目录')}catch(e){msg(nice(e),1)}finally{sdCatalog.rescanning=false;if(btn)btn.disabled=sdCatalog.reading||sdCatalog.loading}return}
+ msg('正在重扫本地配方与模型文件…');
+ try{const j=await sdNative('models/refresh','POST',{},null,'refresh');const note=sdRescanNotice(j&&j.errors);await sdRead();if(note)msgAdd(note,1)}
+ catch(e){if(e.unsupported||e.status===404){sdCatalog.native=false;sdRender();msg('此服务端不支持配方重扫，已改用 OpenAI 兼容模型目录。',1)}else msg(nice(e),1)}finally{sdCatalog.rescanning=false;if(btn)btn.disabled=sdCatalog.reading||sdCatalog.loading}}
+// 读一次服务器模型状态并写回本地状态（读目录与校正共用这一条路径）
+async function sdStatus(){const st=await sdNative('models/status','GET');if(st&&Object.keys(st).length)sdCatalog.status=st;else if(!sdCatalog.status)sdCatalog.status={};return sdCatalog.status}
+// 失败后重新读一次服务器状态：选择器只显示服务器实际在用的配方
+let sdSyncP=null;
+function sdSync(){if(sdSyncP)return sdSyncP;const before=sdLoaded().value;
+ const p=(async()=>{let ok=false;try{await sdStatus();ok=true}catch(e){}
+  finally{sdRender();if(before!=sdLoaded().value&&!W.busy)render()}return ok})();
+ sdSyncP=p.then(v=>{sdSyncP=null;return v});
+ return sdSyncP}
+async function sdLoad(){if(sdCatalog.loading)return;const id=sdCatalog.pending||'';if(!id||id=='@command-line')return;
+ sdCatalog.loading=true;sdCatalog.loadingId=id;const rb=$('#cfRecipeRefresh');if(rb)rb.disabled=true;sdRender();msg('正在加载配方 '+sdRecipeName(id)+'…');let ok=false;
+ const ac=new AbortController();let tmo=false;const tm=setTimeout(()=>{tmo=true;ac.abort()},window.__TMO||180000);
+ try{const j=await sdNative('models/load','POST',{recipe:id},ac.signal);const st=Object.assign({},j||{});
+  if(st.state=='ready'&&!st.recipe)st.recipe=id;
+  if(st.state&&st.state!='ready')throw Error(st.error||('本地模型未就绪（'+st.state+'）'));
+  if(!st.recipe)throw Error('加载响应里没有已加载配方信息');
+  sdCatalog.status=st;sdCatalog.pending='';ok=true}
+ catch(e){if(tmo)msg('加载超时：等了 3 分钟还没有返回，模型可能仍在加载，请稍后点「刷新」查看状态。',1);else msg(nice(e),1);
+  sdCatalog.loadingId=null;sdCatalog.pending='';sdRender();const seen=await sdSync();if(!seen)msgAdd('（未能读取服务器当前模型状态，界面显示的是上次读到的结果）')}
+ finally{clearTimeout(tm);sdCatalog.loading=false;sdCatalog.loadingId=null;if(rb)rb.disabled=sdCatalog.reading;sdRender();if(ok){render();msg('已加载：'+sdRecipeName(sdLoaded().value))}}}
+$('#cfTest').onclick=async()=>{const o=cfgRead();if(!o.key&&needsKey(o.prov))return msg('请先填写 API Key',1);if(isCustom(o.prov)&&!o.base)return msg('请填写 Base URL',1);const old=Object.assign({},cfg);Object.assign(cfg,o);msg('正在连接…');
+ try{const g=proto()=='gemini',url=g?`${root()}/models/${encodeURIComponent(modelOf())}`:`${root()}/models`;const r=await call(url,{method:'GET',headers:auth()});const j=await apiBody(r);
+  if(!r.ok){if(forcesProxy(cfg.prov)&&r.status==404){if((r.headers.get('content-type')||'').includes('text/html')){const e=Error('');e.zh='本站代理未生效：/api/proxy 返回的是网站静态页面而不是接口响应，Seedream 暂时连不上，请稍后再试或联系站长';throw e}return msg('地址可达、密钥已被接受（方舟不提供模型列表接口，可直接生成测试）')}throw await apiErr(r,j)}
   if(g)msg(`连接成功：模型 ${j&&j.displayName||modelOf()} 可用`);else{const ids=(j&&j.data||[]).map(m=>m.id),has=ids.includes(modelOf());msg(`连接成功：共 ${ids.length} 个模型`+(ids.length?(has?`，包含 ${modelOf()}`:`，但未找到 ${modelOf()}（中转可能不列出，可直接尝试）`):''))}}
  catch(e){msg(nice(e),1)}finally{Object.assign(cfg,old)}};
 // ---------- 请求 ----------
-function auth(){return proto()=='gemini'?{'x-goog-api-key':cfg.key}:{Authorization:'Bearer '+cfg.key}}
+function auth(){const mode=keyMode(cfg.prov);if(mode=='none')return{};return mode=='google'?{'x-goog-api-key':cfg.key}:{Authorization:'Bearer '+cfg.key}}
 const p2=n=>String(n).padStart(2,'0'),stamp=d=>`${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;
 const OFF=/^(api\.openai\.com|generativelanguage\.googleapis\.com|ark\.[a-z0-9-]+\.(volces|bytepluses)\.com)$/;
-function call(url,o){let hn='';try{hn=new URL(url).hostname}catch(e){}const cu=cfg.prov=='custom'||!OFF.test(hn);if(!cfg.proxy)return fetch(url,o);const h=new Headers(o.headers||{});h.set('x-target-url',url);if(cu)h.set('x-proxy-custom','1');return fetch('/api/proxy',Object.assign({},o,{headers:h}))}
+function call(url,o){if(!proxyAllowed(cfg.prov))return fetch(url,o);let hn='';try{hn=new URL(url).hostname}catch(e){}const cu=isCustom(cfg.prov)||!OFF.test(hn);if(!cfg.proxy)return fetch(url,o);const h=new Headers(o.headers||{});h.set('x-target-url',url);if(cu)h.set('x-proxy-custom','1');return fetch('/api/proxy',Object.assign({},o,{headers:h}))}
 async function fetchResult(url){let r=await fetch(url).catch(()=>null);if(!r||!r.ok)r=await fetch('/api/proxy',{headers:{'x-target-url':url,'x-proxy-kind':'image'}}).catch(()=>null);if(r&&r.ok)return r.blob();const e=Error('');e.zh='结果图片无法在浏览器中下载，请直接打开：'+url;throw e}
 
 const SAFE_RE=/safety system|safety_violations|moderation_blocked|content_policy_violation|content policy|SensitiveContent|sensitive content|PROHIBITED_CONTENT|IMAGE_SAFETY|\bSAFETY\b|BLOCKLIST|SPII|blocked by|内容安全|敏感/i;
@@ -160,40 +247,59 @@ const CAT=[[/minor|child|CSAM/i,'涉及未成年人'],[/sexual|SEXUALLY_EXPLICIT
 function safeErr(raw,j,rid){const t=String(raw||'')+' '+JSON.stringify(j||'');if(!SAFE_RE.test(t))return null;const e=Error(String(raw||'safety'));const c=CAT.filter(x=>x[0].test(t)).map(x=>x[1]);
  e.safe={cats:[...new Set(c)],where:/InputImage|input image/i.test(t)?'in':/OutputImage|output/i.test(t)?'out':'',rid:rid||(t.match(/req_[A-Za-z0-9]+/)||[])[0]||''};
  let r=String(raw||'').trim();if(cfg.key)r=r.split(cfg.key).join('***');e.raw=r||t.slice(0,600);e.zh='被服务商的安全审核拦下了';return e}
-async function apiErr(r,j){if(j===undefined)j=await r.json().catch(()=>null);const raw=(j&&(j.error&&(j.error.message||j.error.status||j.error)||j.message))||r.statusText||'';{const se=safeErr(typeof raw=='string'?raw:JSON.stringify(raw),j,(j&&j.error&&j.error.request_id)||r.headers.get('x-request-id'));if(se){se.status=r.status;return se}}
+async function apiBody(r){const t=await r.text();try{return JSON.parse(t)}catch(e){r._text=t;return null}}
+const LOAD_ERR={400:'配方配置无效，请刷新配方列表后再试',409:'本地模型正忙（还有生成任务没结束），请稍后再加载',422:'本地模型加载失败',429:'本地服务器繁忙，请稍后重试',500:'本地模型加载时服务器出错',503:'本地模型正在加载中，请稍后再试'};
+const REFRESH_ERR={409:'本地模型正忙，暂时不能重扫配方',503:'本地模型正在加载或卸载，请稍后再重扫'};
+async function apiErr(r,j,scope){const textBody=r._text||'';const raw=(j&&(j.error&&(j.error.message||j.error.status||j.error)||j.message))||textBody||r.statusText||'';{const se=safeErr(typeof raw=='string'?raw:JSON.stringify(raw),j,(j&&j.error&&j.error.request_id)||r.headers.get('x-request-id'));if(se){se.status=r.status;return se}}
+ if(isLocal(cfg.prov)){const t=String(typeof raw=='string'?raw:JSON.stringify(raw)).trim(),model=scope=='model',load=scope=='load',refresh=scope=='refresh',code=(j&&(j.code||(j.error&&j.error.code)))||'',cd=code?'（'+code+'）':'';let zh;
+  if(load)zh=(LOAD_ERR[r.status]||('本地模型加载失败（HTTP '+r.status+'）'))+cd+(t?'：'+t.slice(0,300):'');
+  else if(refresh)zh=(REFRESH_ERR[r.status]||('重扫本地配方与模型文件失败'+(r.status?'（HTTP '+r.status+'）':'')))+cd+(t?'：'+t.slice(0,300):'');
+  else if(r.status==429)zh=model?'本地服务器繁忙，请稍后重试':'本地生成队列已满，请稍后重试';
+  else if(r.status==503)zh=model?'本地模型信息暂不可用（可能正在加载），请稍等再试':'本地模型尚未就绪（可能正在加载），请稍等再重试'+cd+(t?'：'+t.slice(0,300):'');
+  else if(r.status>=500)zh=(model?'读取本地模型信息失败':'本地 sd.cpp 服务器报错')+(t?'：'+t.slice(0,300):'');
+  else zh=(model?'读取本地模型信息失败':'本地生图失败')+'（HTTP '+r.status+'）'+(t?'：'+t.slice(0,300):'');
+  const e=Error(t);e.status=r.status;e.zh=zh;e.modelState=!model&&!load&&!refresh&&(r.status==503||/model_loading|model_not_loaded/.test(code));return e}
  const m={400:'请求参数有误：常见原因是模型不支持参考图、画幅尺寸不对或图片格式不支持，可换个模型或画幅再试',401:'密钥无效或已过期，请检查 API Key',403:'没有权限：密钥无此模型权限、账户未验证，或所在地区不受支持',404:'地址或模型不存在：请检查 Base URL 和模型名',413:'图片太大，请换一张更小的照片',429:'请求过于频繁或额度已用完，请稍后再试或检查账户余额',500:'服务商内部错误，请稍后重试',502:'网关错误（中转服务不可用）',503:'服务暂时不可用，请稍后重试',504:'服务商响应超时，请重试'}[r.status]||('请求失败（HTTP '+r.status+'）');
  let t=String(typeof raw=='string'?raw:JSON.stringify(raw));if(cfg.key)t=t.split(cfg.key).join('***');const bad=/API_KEY_INVALID|API key not valid|invalid api key|Incorrect API key|AuthenticationError|InvalidApiKey/i.test(t+' '+JSON.stringify(j||''));const ans=!bad&&t.match(/Argument not supported:\s*(\w+)/i);const e=Error(t);e.status=r.status;e.zh=(bad?'密钥无效或已过期，请检查 API Key':ans?`该服务商不支持 ${ans[1]} 参数：当前接口协议与它的规格对不上，请检查「接口协议」设置（xAI 请改选 xAI 协议）`:m)+(t?`\n服务商返回：${t.slice(0,300)}`:'');return e}
-function nice(e){if(e.name=='AbortError')return'已取消';if(e instanceof TypeError)return'无法连接到服务商：网络不通，或该地址不允许浏览器跨域访问（CORS）。\n可在 API 设置中开启「通过本站代理转发」。';return e.zh||e.message||String(e)}
+function nice(e){if(e.name=='AbortError')return'已取消';if(e instanceof TypeError&&isLocal(cfg.prov)){const base=root();if(location.protocol=='https:'&&/^http:\/\//.test(base))return '从 HTTPS 页面连接本地 HTTP 服务失败：Chrome/Firefox 通常允许回环地址，但 Safari、旧版浏览器或本地网络访问授权可能拦截（混合内容）。请允许浏览器的本地网络访问提示，改用 http:// 打开 PoseWear（例如 http://localhost:8787），或为本地服务配置 HTTPS 后再试。';return '无法连接到本地 sd.cpp 服务器：请确认 sd-server 已启动并监听当前 Base URL 指向的地址（'+base+'；默认监听 127.0.0.1:1234）。'}if(e instanceof TypeError)return'无法连接到服务商：网络不通，或该地址不允许浏览器跨域访问（CORS）。\n可在 API 设置中开启「通过本站代理转发」。';return e.zh||e.message||String(e)}
 const AR={auto:null,'2:3':'1024x1536','3:4':'1024x1536','9:16':'1024x1536','1:1':'1024x1024','4:3':'1536x1024','16:9':'1536x1024'};
-const SD={auto:'1728x2304','2:3':'1664x2496','3:4':'1728x2304','9:16':'1440x2560','1:1':'2048x2048','4:3':'2304x1728','16:9':'2560x1440'};
+const SEEDREAM_SIZE={auto:'1728x2304','2:3':'1664x2496','3:4':'1728x2304','9:16':'1440x2560','1:1':'2048x2048','4:3':'2304x1728','16:9':'2560x1440'};
+const sizeFor=(p,ar,fallback)=>(provInfo(p).sizeTable==='SEEDREAM'?SEEDREAM_SIZE:AR)[ar]||fallback;
 const toB=async d=>(await fetch('data:image/png;base64,'+d)).blob();
-async function openaiData(j){const d=j&&j.data&&j.data[0];if(!d){const e=Error('');e.zh='服务商没有返回图片数据'+(j&&j.error?'：'+(j.error.message||''):'');throw e}return d.b64_json?toB(d.b64_json):fetchResult(d.url)}
+async function openaiData(j,opts={}){const d=j&&j.data&&j.data[0],local=isLocal(cfg.prov),b64Only=opts.b64Only??b64OnlyMode(cfg.prov);if(!d||(b64Only?!d.b64_json:(local&&!d.b64_json&&!d.url))){const e=Error('');e.zh=local?'生图失败：本地 sd.cpp 服务器返回成功但没有图片数据，请查看服务端日志':'服务商没有返回图片数据'+(j&&j.error?'：'+(j.error.message||''):'');throw e}return d.b64_json?toB(d.b64_json):fetchResult(d.url)}
 async function genOnce(imgs,prompt,sig,arO){const ar=arO||$('#wbAR').value,m=modelOf(),P=proto();let warn='';
+ const json=async(withImgs,extra)=>{const body=Object.assign({model:m,prompt,n:1},extra);if(withImgs&&imgs.length)body.image=await Promise.all(imgs.map(dataURL));
+  const r=await call(`${root()}/images/generations`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body)});const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j);return openaiData(j)};
+ const sendReferenceRequest=async o=>{const endpoint=o.endpoint||'/images/edits',field=o.field||'image[]',size=o.size||'1024x1024',fallback=o.fallback||'tolerant',scope=o.scope||'generate',b64Only=!!o.b64Only,max=o.max||imgs.length,headers=o.headers===undefined?auth():o.headers;
+  const build=f=>{const fd=new FormData();fd.append('model',m);fd.append('prompt',prompt);fd.append('n','1');fd.append('size',size);imgs.slice(0,max).forEach((b,i)=>fd.append(f,b,`ref-${i+1}.jpg`));return fd};
+  const send=async f=>{const r=await call(`${root()}${endpoint}`,{method:'POST',signal:sig,headers,body:build(f)});const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j,scope);return{blob:await openaiData(j,{b64Only})}};
+  if(fallback=='strict')return send(field);
+  const alt=field=='image[]'?'image':'image[]';
+  try{return await send(field)}catch(e){if(e.name=='AbortError'||e.safe)throw e;if(/Argument not supported/i.test(e.message))throw e;
+   if(e.status==400&&/image/i.test(e.message)&&!/safety|moderation|reject/i.test(e.message)){try{const r=await send(alt);return{...r,warn:'已自动改用另一种图片字段名重试成功。'}}catch(x){}}
+   if([404,405,415,501].includes(e.status)||/edits|not supported|unsupported|no such|invalid url/i.test(e.message)){try{return{blob:await json(true,{size}),warn:'该接口不支持 images/edits，已自动改用 images/generations（JSON 多图）。'}}catch(x){if(x.name=='AbortError')throw x;return{blob:await json(false,{size}),warn:'该接口不支持参考图，结果只按文字生成，人物与服装可能对不齐。'}}}
+   throw e}};
  if(P=='gemini'){const parts=[{text:prompt}];for(const b of imgs)parts.push({inline_data:{mime_type:b.type||'image/jpeg',data:await b64(b)}});const gc={responseModalities:['TEXT','IMAGE']};if(ar!='auto')gc.imageConfig={aspectRatio:ar};
   const r=await call(`${root()}/models/${encodeURIComponent(m)}:generateContent`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify({contents:[{role:'user',parts}],generationConfig:gc})});
-  const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j);const c=j&&j.candidates&&j.candidates[0],ps=((j&&j.candidates)||[]).flatMap(c=>(c.content&&c.content.parts)||[]),im=ps.find(p=>(p.inlineData||p.inline_data||{}).data);
+  const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j);const c=j&&j.candidates&&j.candidates[0],ps=((j&&j.candidates)||[]).flatMap(c=>(c.content&&c.content.parts)||[]),im=ps.find(p=>(p.inlineData||p.inline_data||{}).data);
   if(!im){const why=(j&&j.promptFeedback&&j.promptFeedback.blockReason)||(c&&c.finishReason);{const rs=(c&&c.safetyRatings||[]).filter(x=>x.blocked||/HIGH|MEDIUM/.test(x.probability||'')).map(x=>x.category).join(' ');const se=why&&/SAFETY|PROHIBITED|BLOCKLIST|SPII|OTHER/i.test(why)?safeErr(why+' '+rs+' '+((c&&c.finishMessage)||''),null,j&&j.responseId):null;if(se)throw se}const t=ps.map(p=>p.text).filter(Boolean).join(' ');const e=Error(t);e.zh='模型没有返回图片'+(why?`（${why}，可能触发了安全策略）`:'')+(t?'\n模型回复：'+t.slice(0,300):'');throw e}
   const d=im.inlineData||im.inline_data;return{blob:await(await fetch(`data:${d.mimeType||d.mime_type||'image/png'};base64,${d.data}`)).blob()}}
- const json=async(withImgs,extra)=>{const body=Object.assign({model:m,prompt,n:1},extra);if(withImgs&&imgs.length)body.image=await Promise.all(imgs.map(dataURL));
-  const r=await call(`${root()}/images/generations`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body)});const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j);return openaiData(j)};
- if(P=='seedream'){const ex={size:SD[ar]||SD.auto,response_format:'b64_json',watermark:false};if(/seedream-4/.test(m))ex.sequential_image_generation='disabled';try{return{blob:await json(true,ex)}}catch(e){if(!e.safe&&e.status==400&&/image|参考/i.test(e.message)){warn='该模型没有接收参考图，结果只按文字生成，人物与服装可能对不齐。';return{blob:await json(false,ex),warn}}throw e}}
+ if(P==SDCPP){const sz=AR[ar]||'1024x1024';
+  if(!imgs.length)return{blob:await json(false,{size:sz})};
+  return await sendReferenceRequest({endpoint:'/images/edits',field:PROV[SDCPP].field,size:sz,b64Only:b64OnlyMode(cfg.prov),fallback:fallbackMode(cfg.prov),scope:'generate'})};
+ if(P=='seedream'){const ex={size:sizeFor(cfg.prov,ar,SEEDREAM_SIZE.auto),response_format:'b64_json',watermark:false};if(/seedream-4/.test(m))ex.sequential_image_generation='disabled';try{return{blob:await json(true,ex)}}catch(e){if(!e.safe&&e.status==400&&/image|参考/i.test(e.message)){warn='该模型没有接收参考图，结果只按文字生成，人物与服装可能对不齐。';return{blob:await json(false,ex),warn}}throw e}}
  if(P=='xai'){const body={model:m,prompt,n:1,response_format:'b64_json'};if(ar!='auto')body.aspect_ratio=ar;let used=imgs;
   if(imgs.length>5){used=imgs.slice(0,5);warn='xAI 参考图最多 5 张，已只发送前 5 张。'}
   if(used.length){const us=await Promise.all(used.map(dataURL));if(us.length==1)body.image={url:us[0]};else body.images=us.map(u=>({url:u}))}
-  const r=await call(`${root()}/images/${used.length?'edits':'generations'}`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body)});const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j);return{blob:await openaiData(j),warn}}
+  const r=await call(`${root()}/images/${used.length?'edits':'generations'}`,{method:'POST',signal:sig,headers:Object.assign({'Content-Type':'application/json'},auth()),body:JSON.stringify(body)});const j=await apiBody(r);if(!r.ok)throw await apiErr(r,j);return{blob:await openaiData(j),warn}}
  const sz=AR[ar]||(/^gpt-image/.test(m)?'auto':'1024x1024');
  if(P=='json')return{blob:await json(true,{size:sz})};
- const edits=async field=>{const fd=new FormData();fd.append('model',m);fd.append('prompt',prompt);const one=/^dall-e-2$/.test(m);(one?imgs.slice(0,1):imgs).forEach((b,i)=>fd.append(field,b,`ref-${i+1}.jpg`));fd.append('n','1');fd.append('size',one&&sz=='auto'?'1024x1024':sz);
-  const r=await call(`${root()}/images/edits`,{method:'POST',signal:sig,headers:auth(),body:fd});const j=await r.json().catch(()=>null);if(!r.ok)throw await apiErr(r,j);return openaiData(j)};
- const f0=cfg.prov=='custom'?cfg.field:'image[]';
- try{return{blob:await edits(f0)}}catch(e){if(e.name=='AbortError'||e.safe)throw e;if(/Argument not supported/i.test(e.message))throw e;
-  if(e.status==400&&/image/i.test(e.message)&&!/safety|moderation|reject/i.test(e.message)){try{return{blob:await edits(f0=='image[]'?'image':'image[]'),warn:'已自动改用另一种图片字段名重试成功。'}}catch(x){}}
-  if([404,405,415,501].includes(e.status)||/edits|not supported|unsupported|no such|invalid url/i.test(e.message)){try{return{blob:await json(true,{size:sz}),warn:'该接口不支持 images/edits，已自动改用 images/generations（JSON 多图）。'}}catch(x){if(x.name=='AbortError')throw x;return{blob:await json(false,{size:sz}),warn:'该接口不支持参考图，结果只按文字生成，人物与服装可能对不齐。'}}}
-  throw e}}
+ const one=/^dall-e-2$/.test(m);
+ return await sendReferenceRequest({endpoint:'/images/edits',field:isCustom(cfg.prov)?cfg.field:'image[]',size:one&&sz=='auto'?'1024x1024':sz,max:one?1:imgs.length,fallback:fallbackMode(cfg.prov),scope:'generate'})}
 // ---------- 进度 ----------
 let T0,tick,PR=0,done=0,total=1;function stage(t){$('#wbStage1').textContent=t}
 function busy(on){$('#wbBusy').hidden=!on;$('#wbGo').classList.toggle('run',on);if(on)$('#wbGo').innerHTML='<i class="ring"></i>生成中…';$('#wbGo').disabled=on;clearInterval(tick);if(on){T0=Date.now();PR=.03;tick=setInterval(()=>{const s=(Date.now()-T0)/1e3,cap=(done+.95)/total;PR=Math.max(done/total,Math.min(cap,PR+(cap-PR)*.03));$('#wbProg').style.transform=`scaleX(${PR})`;$('#wbTime').textContent=`${Math.round(s)} 秒`+(total>1?` · 已完成 ${done} / ${total}`:'');},250)}else render()}
-async function run(opts={}){if(!cfg.key){toast('请先配置你的 API');cfgOpen();return{got:[],errs:[],warns:[],nokey:true}}if(!opts.quick){if(!isGen()&&!hasPerson())return toast('请先上传人物照片');if(!W.garments.length)return toast('请先选择服装')}
+async function run(opts={}){if(!cfg.key&&needsKey(cfg.prov)){toast('请先配置你的 API');cfgOpen();return{got:[],errs:[],warns:[],nokey:true}}if(!opts.quick){if(!isGen()&&!hasPerson())return toast('请先上传人物照片');if(!W.garments.length&&!(isLocal(cfg.prov)&&isGen()))return toast('请先选择服装')}
  let modeBak=null;if(opts.quick&&!hasPerson()&&W.mode!='gen'){modeBak=W.mode;W.mode='gen'}
  const ac=new AbortController();W.busy=ac;$('#wbErr').hidden=true;$('#wbWarn').hidden=true;
  const n=opts.n||(+$('#wbN').value||1),sets=W.poses.length>1&&W.bm=='each'?W.poses.map(p=>[p]):[W.poses];const jobs=[];sets.forEach(s=>{for(let i=0;i<n;i++)jobs.push(s)});
@@ -202,7 +308,7 @@ async function run(opts={}){if(!cfg.key){toast('请先配置你的 API');cfgOpen
   const custom=opts.prompt!=null?opts.prompt:(W.dirty?$('#wbPrompt').value.trim():null);stage(total>1?`模型正在绘制… 共 ${total} 张`:'模型正在绘制…');
   let q=0;const worker=async()=>{while(q<jobs.length&&!ac.signal.aborted){const set=jobs[q++];try{const imgs=[...pb,...gb,...await Promise.all(set.map(poseB)),...eb];const prompt0=custom&&(sets.length==1||opts.quick)?custom:compose(set),soft=neutralOn()&&!isAdultJob(set),prompt=soft?neutralize(prompt0):prompt0;W.lastSent=prompt;
     const jc=new AbortController(),onA=()=>jc.abort();ac.signal.addEventListener('abort',onA);let tmo=false;const tm=setTimeout(()=>{tmo=true;jc.abort()},window.__TMO||180000);let r;try{r=await genOnce(imgs,prompt,jc.signal,opts.ar)}catch(x){x.sent=prompt;if(tmo&&!ac.signal.aborted){const y=Error('timeout');y.zh='等了 3 分钟还没有返回。服务商可能正忙，稍后点「重试」。';throw y}throw x}finally{clearTimeout(tm);ac.signal.removeEventListener('abort',onA)}if(r.warn)warns.add(r.warn);const rec={t:Date.now()+Math.random(),prov:cfg.prov,model:modelOf(),prompt,orig:soft?prompt0:null,neutral:soft,mode:W.mode,label:set.map(p=>poseDesc(p,false).split('（')[0]).join(' / ')||'',before:pb[0]||null,after:r.blob};got.push(rec);await save(rec);W.results=got.slice();if(!opts.quick)show(got.length-1)}
-   catch(e){if(e.name=='AbortError')throw e;errs.push(e)}finally{done++;if(opts.onTick)opts.onTick(done,total)}}};
+   catch(e){if(e.name=='AbortError')throw e;if(e.modelState)sdSync();/*本地模型状态异常：重读服务器状态，别停在失效配方上*/errs.push(e)}finally{done++;if(opts.onTick)opts.onTick(done,total)}}};
   await Promise.all(Array.from({length:Math.min(2,jobs.length)},worker));
   if(got.length){toast(got.length>1?`完成 ${got.length} 张`:'生成完成');hist();window.HIS&&HIS.refresh()}if(errs.length&&!opts.quick){const e=errs.find(x=>x.safe)||errs[0];errBox(e,got.length?`${errs.length} 张生成失败`:'')}
   if(warns.size&&!opts.quick){$('#wbWarn').hidden=false;$('#wbWarn').textContent=[...warns].join(' ')}}
@@ -240,7 +346,7 @@ $('#wbHClr').onclick=async()=>{const all=W.hist||[];if(!all.length)return toast(
 let inited=false;async function init(){if(inited)return;inited=true;const gk=[].concat(g0.g||[]),pk=(g0.p||[]).filter(x=>Array.isArray(x)),ek=(g0.e||[]).filter(x=>Array.isArray(x));const need=[gk.length&&'costume',gk.some(k=>k[0]=='a')&&'anime',pk.length&&'pose',ek.length&&'expr'].filter(Boolean);if(need.length)await Promise.all(need.map(A.load)).catch(()=>{});
  if(!W.garments.length)W.garments=gk.filter(k=>A.ITEMS[k]).slice(0,1).map(k=>({kind:'lib',k}));if(!W.poses.length)W.poses=pk.filter(x=>A.ITEMS[x[0]]).slice(0,6).map(x=>({kind:'lib',k:x[0],ai:x[1]??A.ITEMS[x[0]].ai}));if(!W.exprs.length)W.exprs=ek.filter(x=>A.ITEMS[x[0]]).slice(0,1).map(x=>({kind:'lib',k:x[0],ai:x[1]??A.ITEMS[x[0]].ai}));hist()}
 async function setSel(sel){await init();W.garments=(sel.garment||[]).slice(0,2).map(it=>({kind:'lib',k:it.k}));W.poses=(sel.pose||[]).slice(0,6).map(it=>({kind:'lib',k:it.k,ai:it.ai}));W.exprs=(sel.expr||[]).slice(0,1).map(it=>({kind:'lib',k:it.k,ai:it.ai}));const pk=(sel.portrait||[])[0];if(pk){if(!(W.persons.length&&W.persons[0].k==pk.k)){W.persons=[];await addPortrait(pk)}}else W.persons=[];reprompt(true);render();return $('#wbPrompt').value}
-window.WB={async show(){await init();render()},async pick(it){await init();if(it.type=='pose'){if(!W.poses.some(p=>p.k==it.k)){if(W.poses.length>=6)W.poses.shift();W.poses.push({kind:'lib',k:it.k,ai:it.ai})}toast(`已加入姿势参考（${W.poses.length} 个）`)}else if(it.type=='portrait'){await addPortrait(it)}else if(it.type=='expr'){W.exprs=[{kind:'lib',k:it.k,ai:it.ai}];toast('已加入表情参考（只取神态）')}else{W.garments=[{kind:'lib',k:it.k}];toast('已选为试穿服装')}A.setTab('studio')},_W:W,_cfg:cfg,db:{tx,save,hist:()=>tx('readonly',s=>s.getAll()),del:t=>tx('readwrite',s=>s.delete(t)),clear:()=>tx('readwrite',s=>s.clear()),put:r=>tx('readwrite',s=>s.put(r)),refreshHist:hist},quick:o=>run(Object.assign({},o||{},{quick:true})),cfgOpen,nice,busy:()=>!!W.busy,stop:()=>{if(W.busy)W.busy.abort()},provLabel:()=>cfg.key?PROV[cfg.prov].name+' · '+modelOf():'',setSel};
+window.WB={async show(){await init();render()},async pick(it){await init();if(it.type=='pose'){if(!W.poses.some(p=>p.k==it.k)){if(W.poses.length>=6)W.poses.shift();W.poses.push({kind:'lib',k:it.k,ai:it.ai})}toast(`已加入姿势参考（${W.poses.length} 个）`)}else if(it.type=='portrait'){await addPortrait(it)}else if(it.type=='expr'){W.exprs=[{kind:'lib',k:it.k,ai:it.ai}];toast('已加入表情参考（只取神态）')}else{W.garments=[{kind:'lib',k:it.k}];toast('已选为试穿服装')}A.setTab('studio')},_W:W,_cfg:cfg,db:{tx,save,hist:()=>tx('readonly',s=>s.getAll()),del:t=>tx('readwrite',s=>s.delete(t)),clear:()=>tx('readwrite',s=>s.clear()),put:r=>tx('readwrite',s=>s.put(r)),refreshHist:hist},quick:o=>run(Object.assign({},o||{},{quick:true})),cfgOpen,nice,needsKey:()=>needsKey(cfg.prov),busy:()=>!!W.busy,stop:()=>{if(W.busy)W.busy.abort()},provLabel:()=>provLabel(),setSel};
 if(document.body.classList.contains('studio'))WB.show();
 if(location.hash=='#studio'){const t0=()=>scrollTo(0,0);requestAnimationFrame(t0);addEventListener('load',()=>setTimeout(t0,0),{once:true})}
 addEventListener('keydown',e=>{if(e.key=='Escape'){if(!$('#pk').hidden)pkClose();else if(!$('#cfg').hidden)cfgClose()}});

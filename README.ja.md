@@ -39,6 +39,17 @@
 | Gemini | Google AI Studio のキー | gemini-2.5-flash-image | 別名 Nano Banana |
 | Doubao Seedream | Volcengine Ark のキー | doubao-seedream-4-0-250828 | CORS のため既定でサイトのプロキシ経由 |
 | Custom relay | ベース URL、キー、モデル | 任意 | OpenAI 互換（edits / generations）または Gemini プロトコル（`models/:generateContent`）。プロキシのトグルはリレーにも適用され、オフの場合は直接接続、リレーのエンドポイントは任意のポートを使用可能 |
+| ローカル sd.cpp | ローカルで動かす sd-server（既定は 127.0.0.1:1234）。ループバックアドレスにのみバインド | `sd-cpp-local`（ローカルのレシピを選択） | API キー不要、サイトのプロキシは経由しません。ブラウザから直接接続 |
+
+ループバックアドレス（`127.0.0.1` / `localhost`）は Chrome と Firefox では一般に信頼できる源として扱われるため、HTTPS ページからローカルの HTTP サーバーへのアクセスは混合コンテンツとしてブロックされません。ただし Safari、古いブラウザ、企業ポリシーではブロックされる場合があり、新しい Chrome ではローカルネットワークへのアクセスを許可するよう求められることがあります。その場合は `http://` で PoseWear を開く（例：`http://localhost:8787`）、またはローカルサーバーに HTTPS を設定してください。sd-server には認証がないため、ループバック以外に公開しないでください。
+
+### ローカル API のクロスオリジン要件
+
+PoseWear のページから `127.0.0.1` へのアクセスはクロスオリジン要求です。CORS は**ローカルサーバー**がレスポンスヘッダーで宣言し、ブラウザが強制します。このサイトに「CORS を有効にする」設定はありません。標準の sd-server は要求元の `Origin` をエコーし、すべてのメソッドとヘッダーを許可し、`OPTIONS` のプリフライトに 204 を返すため、追加設定は不要です。自作またはサードパーティのローカルサービスを使う場合は、`Access-Control-Allow-Origin`（サイトの Origin または `*`）、`Access-Control-Allow-Methods: GET, POST, OPTIONS`、`Access-Control-Allow-Headers: Content-Type` を返し、`OPTIONS` を処理してください。JSON 生図とネイティブなモデル管理要求は `Content-Type: application/json` のためプリフライトが発生し、マルチパートの参考画像要求では発生しません。PoseWear は認証情報を送らないため、`Allow-Credentials: true` と `Allow-Origin: *` は併用できません。
+
+サイト側の対応する設定は、ビルド時の CSP `connect-src` 許可リスト（`http://127.0.0.1:*` と `http://localhost:*` を許可済み）と、ローカル服务商が常に直接接続してプロキシを使わないことです。どちらも利用者が変更するものではなく、サイトのプロキシはプライベートアドレスを拒否するため CORS の代わりにはなりません。「接続できない」は 3 種類を分けて確認してください。CORS はローカルサーバーのヘッダーとプリフライト、混合コンテンツはページとローカルサーバーのプロトコル、CSP はサイトの許可リストが原因です。
+
+参考画像は常に厳密に送信されます。参考画像に基づく生成に対応したモデルのみがそれを使用し、一部のモデルではエラーになる、または画像が無視されることがあります。詳細は [sd.cpp API 契約のモデル能力マトリクス](docs/sdcpp-api.md) を参照してください。
 
 ## 変更履歴
 

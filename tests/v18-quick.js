@@ -7,7 +7,7 @@ const { chromium } = require('playwright'); const path = require('path'), FX = p
     hits.push(u); const H = { 'content-type': 'application/json', 'access-control-allow-origin': '*' };
     if (mode == '500') return route.fulfill({ status: 500, headers: H, body: '{"error":{"message":"internal"}}' });
     return route.fulfill({ status: 200, headers: H, body: JSON.stringify({ data: [{ b64_json: P[(cnt++) % 2] }] }) }) };
-  async function setup(withKey) { const c = await b.newContext({ viewport: { width: 1366, height: 900 } }); const p = await c.newPage(); p.on('pageerror', e => errs.push(e.message));
+  async function setup(withKey) { const c = await b.newContext({ serviceWorkers: 'block', viewport: { width: 1366, height: 900 } }); const p = await c.newPage(); p.on('pageerror', e => errs.push(e.message));
     await p.route(/api\.openai\.com|\/api\/proxy/, handler);
     await p.addInitScript((withKey) => { if (!sessionStorage.x) { sessionStorage.x = 1; if (withKey) localStorage.setItem('wbCfg', JSON.stringify({ prov: 'openai', key: 'sk-test-123', base: '', model: '', field: 'image[]', proto: 'edits', proxy: false })); localStorage.setItem('introX', '1') } }, withKey);
     await p.goto(U + '/#costume'); await p.waitForFunction(() => window.WB && window.APP, null, { timeout: 15000 });

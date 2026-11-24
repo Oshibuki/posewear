@@ -1,10 +1,11 @@
 const {chromium}=require('playwright');const path=require('path'),FX=path.join(__dirname,'fixtures')+'/',SS=path.join(__dirname,'screenshots')+'/';require('fs').mkdirSync(SS,{recursive:true});const fs=require('fs');
 (async()=>{const U=process.env.U||'http://localhost:8787';const b=await chromium.launch({executablePath:process.env.CHROME_PATH});const R=[],errs=[];const S=SS+'v13-';
 const P=[fs.readFileSync(FX+'mk1.png').toString('base64'),fs.readFileSync(FX+'mk2.png').toString('base64')];let mode='ok',cnt=0,hits=[],bodies=[];
-async function setup(prov,vp,dark){const c=await b.newContext({viewport:vp||{width:1366,height:900},colorScheme:dark?'dark':'light'});const p=await c.newPage();p.on('pageerror',e=>errs.push(prov+': '+e.message));
+async function setup(prov,vp,dark,proto){const c=await b.newContext({serviceWorkers:'block',viewport:vp||{width:1366,height:900},colorScheme:dark?'dark':'light'});const p=await c.newPage();p.on('pageerror',e=>errs.push(prov+': '+e.message));
  const handler=async(route)=>{const req=route.request();const u=req.url();if(req.method()=='OPTIONS')return route.fulfill({status:204,headers:{'access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'*'}});
   hits.push(prov+' '+u+' '+(req.headers()['x-target-url']||''));bodies.push(req.postData()||'');const H={'content-type':'application/json','access-control-allow-origin':'*'};const img=P[(cnt++)%2];
   if(mode.startsWith('safe')){const MS={'safe-oai':[400,{error:{message:'Your request was rejected by the safety system. If you believe this is an error, contact us at help.openai.com and include the request ID req_abc123XYZ. safety_violations=[sexual].',type:'image_generation_user_error',code:'moderation_blocked'}}],'safe-gem':[200,{candidates:[{finishReason:'IMAGE_SAFETY',content:{parts:[{text:'I cannot generate this.'}]}}],responseId:'gemResp1'}],'safe-gem2':[200,{promptFeedback:{blockReason:'PROHIBITED_CONTENT'}}],'safe-sd':[400,{error:{code:'InputImageSensitiveContentDetected',message:'The request failed because the input image may contain sensitive information. Request id: 0217abc'}}]};const [s,bd]=MS[mode];return route.fulfill({status:s,headers:H,body:JSON.stringify(bd)})}
+  if(mode=='field400'&&hits.filter(h=>/images\/edits/.test(h)).length===1)return route.fulfill({status:400,headers:H,body:JSON.stringify({error:{message:'image field not supported'}})});
   if(mode=='401')return route.fulfill({status:401,headers:H,body:JSON.stringify({error:{message:'Incorrect API key provided: sk-test-123'}})});
   if(mode=='429')return route.fulfill({status:429,headers:H,body:JSON.stringify({error:{message:'Rate limit reached'}})});
   if(mode=='500')return route.fulfill({status:500,headers:H,body:'{"error":{"message":"internal"}}'});
@@ -13,7 +14,7 @@ async function setup(prov,vp,dark){const c=await b.newContext({viewport:vp||{wid
   const body=/generateContent/.test(u+(req.headers()['x-target-url']||''))?{candidates:[{content:{parts:[{text:'ok'},{inlineData:{mimeType:'image/png',data:img}}]}}]}:{data:[{b64_json:img}]};
   return route.fulfill({status:200,headers:H,body:JSON.stringify(body)})};
  await p.route(/api\.openai\.com|generativelanguage\.googleapis\.com|ark\.cn-beijing\.volces\.com|relay\.example\.com|\/api\/proxy/,handler);
- await p.addInitScript(([prov,dark])=>{if(!sessionStorage.x){sessionStorage.x=1;localStorage.setItem('wbCfg',JSON.stringify({prov,key:'sk-test-123',base:prov=='custom'?'https://relay.example.com':'',model:'',field:'image[]',proto:'json',proxy:false}));localStorage.setItem('introX','1');if(dark)localStorage.setItem('theme','dark')}window.__TMO=3000},[prov,dark]);
+ await p.addInitScript(([prov,dark,proto])=>{if(!sessionStorage.x){sessionStorage.x=1;localStorage.setItem('wbCfg',JSON.stringify({prov,key:'sk-test-123',base:prov=='custom'?'https://relay.example.com':'',model:'',field:'image[]',proto:proto||'json',proxy:false}));localStorage.setItem('introX','1');if(dark)localStorage.setItem('theme','dark')}window.__TMO=3000},[prov,dark,proto]);
  await p.goto(U+'/#studio');await p.waitForFunction(()=>window.WB&&window.APP,null,{timeout:15000});
  await p.setInputFiles('#wbFile',FX+'person.png');
  await p.evaluate(async()=>{await APP.load('costume');const k=Object.keys(APP.ITEMS).find(k=>APP.ITEMS[k].type=='costume');await WB.pick(APP.ITEMS[k])});
@@ -53,10 +54,12 @@ for(const prov of ['openai','gemini','seedream','custom']){hits=[];mode='ok';con
   await p.click('#wbHClr');await p.waitForTimeout(300);h1=(await st(p)).hist;await p.click('#toast button');await p.waitForTimeout(400);h2=(await st(p)).hist;R.push(['hist clear+undo',h1==0&&h2==h0,`${h0}->${h1}->${h2}`]);
   await p.evaluate(()=>{document.querySelector('#cfg').hidden=false});await p.waitForTimeout(300);await p.screenshot({path:S+'d-settings.png'});}
  await c.close()}
+// tolerant providers keep the field fallback after the shared request pipeline refactor
+mode='field400';{hits=[];bodies=[];const {c,p}=await setup('custom',null,false,'edits');await go(p);const warn=await p.$eval('#wbWarn',e=>e.hidden?'':e.textContent);R.push(['tolerant field fallback kept',/已自动改用另一种图片字段名/.test(warn)&&hits.filter(h=>/images\/edits/.test(h)).length===2&&/name="image"/.test(bodies[1]||''),JSON.stringify({warn,hits:hits.length,body:(bodies[1]||'').slice(0,120)})]);await c.close()}
 // mobile dark studio + settings
 mode='ok';{const {c,p}=await setup('openai',{width:390,height:844},true);await go(p);await p.screenshot({path:S+'m-dark-result.png'});await p.evaluate(()=>{document.querySelector('#cfg').hidden=false});await p.waitForTimeout(300);await p.screenshot({path:S+'m-dark-settings.png'});await c.close()}
 // dark across pages
-const c=await b.newContext({viewport:{width:1366,height:900},colorScheme:'dark'});const p=await c.newPage();p.on('pageerror',e=>errs.push('dark: '+e.message));await p.addInitScript(()=>{localStorage.setItem('theme','dark');localStorage.setItem('introX','1')});
+const c=await b.newContext({serviceWorkers:'block',viewport:{width:1366,height:900},colorScheme:'dark'});const p=await c.newPage();p.on('pageerror',e=>errs.push('dark: '+e.message));await p.addInitScript(()=>{localStorage.setItem('theme','dark');localStorage.setItem('introX','1')});
 for(const [n,u] of [['fav','/#fav'],['recent','/#recent'],['404','/nope']]){await p.goto(U+u);await p.waitForTimeout(1500);await p.screenshot({path:S+'dark-'+n+'.png'});const bg=await p.evaluate(()=>getComputedStyle(document.body).backgroundColor);R.push(['dark '+n,!/255, 255, 255/.test(bg),bg])}
 await p.goto(U+'/');await p.waitForFunction(()=>APP.ITEMS&&Object.keys(APP.ITEMS).length,null,{timeout:15000});const href=await p.evaluate(async()=>{await APP.load('costume');const k=Object.keys(APP.ITEMS).find(k=>APP.ITEMS[k].type=='costume');return '/costume/'+APP.ITEMS[k].id+'/'});await p.goto(U+href);await p.waitForTimeout(800);await p.screenshot({path:S+'dark-seo.png'});R.push(['dark seo',!/255, 255, 255/.test(await p.evaluate(()=>getComputedStyle(document.body).backgroundColor)),href]);
 // combo + long/extreme
