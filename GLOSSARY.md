@@ -28,6 +28,10 @@ The text describing the desired generated image. Composed from the selected refe
 
 A trained diffusion weight file. A complete generator may need several model files together (for example a diffusion model and a text encoder).
 
+## Model catalog（模型目录）
+
+The list of model IDs a provider offers for generation. It is read from the OpenAI-compatible `/v1/models` endpoint and is distinct from Recipe（配方） and Loaded model（已加载模型）.
+
 ## Recipe（配方）
 
 A named combination of model files and default generation settings. This is what a user picks when choosing which local model to generate with; it becomes the model in effect only after it has been loaded.
