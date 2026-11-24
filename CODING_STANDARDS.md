@@ -22,6 +22,10 @@ Calls to the sd.cpp native `/sdcpp/v1/*` endpoints (recipes, models/status, mode
 
 The interface may only show a loaded model after a real status has been read (`sdCatalog.status`). A pending selection, a placeholder line, or a failed load must not render as "currently loaded". This is the interface half of the rule in `docs/adr/0001-sdcpp-local-direct.md`.
 
+## Guard facts are derived from the spec, not from the finished text
+
+When a spec or design doc calls for a guard (or a change adds one), map every acceptance/decision item in the spec to an explicit checked fact before writing the guard. Facts copied from the finished document's current wording only catch later deletions; they cannot catch a spec requirement that was never implemented (the 2026-11-24 capability-matrix round shipped the matrix without the scope sentence its own spec required, and the guard copied the text so it passed anyway). Check this rule when a change adds or extends a static guard script under `tests/`.
+
 ## The recipe selector shows the model the server reports as loaded
 
 The recipe dropdown in the API settings (`#cfRecipe`) shows the recipe the server reports as loaded; a recipe the user has picked but not loaded is never presented as the model in effect. Such a pick is shown next to it as a pending label (`#cfRecipePending`, with a cancel action) and becomes the loaded model only after an explicit confirm. After a failed load, or after a generation failure that reports a model-state problem, the UI re-reads `GET /sdcpp/v1/models/status` and corrects the selection from that answer (`sdSync()` in `src/studio.js`); the failure reason stays on screen while the selection is corrected.

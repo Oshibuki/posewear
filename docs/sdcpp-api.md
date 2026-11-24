@@ -62,17 +62,32 @@ PoseWear 的「刷新」按钮 = **先 POST 重扫，成功后才并发 GET `/re
 
 PoseWear 客户端严格发送参考图且不做字段/端点回退（见 ADR-0002）。下表描述上游服务端是否采用这些图像；两者不是同一层。请求已发出 ≠ 参考图已生效。
 
-非穷尽清单，核对自 stable-diffusion.cpp 固定 commit `6b3edaaf32cc19e5bb2d819c788bd557eddc8eba` 的 `docs/`，核对日期 2026-11-24；新增模型查对应上游 docs。
+本矩阵描述 `/v1/images/edits` 生成请求的上游模型能力，不属于原生模型管理端点。
 
-| 模型族 / 代表模型 | 参考图生图能力（按上游示例） | 图像输入方式 | 备注 / 风险 | 依据 |
-|---|---|---|---|---|
-| Stable Diffusion 1.x（示例为 SD 1.4） | 有示例（img2img） | `sd-cli -i ... --strength` | 文档明确给出从参考图生成结果的命令 | `docs/sd.md`，固定 commit `6b3edaa` |
-| FLUX.2-dev / klein 4B / klein 9B | 有示例（参考图输入） | `sd-cli -r` | 文档示例从参考图生成编辑结果；未使用 `img2img` 一词，不据此否认能力 | `docs/flux2.md`，固定 commit `6b3edaa` |
-| FLUX.1-Kontext-dev、Qwen Image Edit | 有示例（参考图输入） | `sd-cli -r` + 编辑提示词 | 文档示例为参考图 + 编辑指令生成结果，属于基于参考图的能力 | `docs/kontext.md`、`docs/qwen_image_edit.md`，固定 commit `6b3edaa` |
-| Stable Diffusion 2.x / SDXL、视频模型、仅文生架构 | 未标注 | 未在对应 docs 中给出参考图生图示例 | 不能据此断定不支持；若上游报错或忽略图像，PoseWear 不会静默改走纯文字 | 对应上游 docs 未给出示例，固定 commit `6b3edaa` |
+非穷尽清单，核对自 stable-diffusion.cpp 固定 commit `6b3edaaf32cc19e5bb2d819c788bd557eddc8eba` 的上游仓库文件（`docs/`、`README.md`、`src/model/diffusion/control.hpp`、`examples/server/api.md`，明细见「来源与核对」），核对日期 2026-11-24；新增模型查对应上游 docs。
+
+本项目以 IP-Adapter 控制人物外观，以 ControlNet 控制人物姿态，针对 SD1.5 等级的模型。下表按上游固定 commit `6b3edaaf32cc19e5bb2d819c788bd557eddc8eba` 核对两类技术在各模型族上的支持程度；判定标准是「上游是否给出可核验的声明、示例或代码分支」，而不是模型族名称是否顺带出现。
+
+表中 SD1.5 之外的模型族只记录上游是否声明或示例这两项技术，不表示它们在本项目中用于外观/姿态控制。
+
+评估维度与判定标准：
+
+- `明确支持`：上游 README、模型文档或示例明确写出该模型族 + 技术名/flags。
+- `仅代码可见`：代码分支显示有对应能力，但 README/模型文档没有示例或声明。
+- `未标注`：上游文档未给出证据；不得据此断定支持或不支持。
+- `不支持`：上游明确排除（如 `vid_gen` 请求体不含 `ip_adapter_image` / `control_image`）。
+
+| 模型族 / 代表模型 | 参考图生图能力 | IP-Adapter（外观/风格） | ControlNet（姿态/结构） | 图像输入方式 | 备注 / 风险 | 依据 |
+|---|---|---|---|---|---|---|
+| Stable Diffusion 1.x（SD1.5 等级；示例为 SD 1.4 / 1.5） | 有示例（img2img） | 明确支持（含 Plus） | 明确支持 | `sd-cli -i ... --strength`；`--ip-adapter-image`；`--control-image` | 需额外权重：CLIP-Vision + IP-Adapter，ControlNet 权重另配 | `docs/ip_adapter.md`、`README.md`、`src/model/diffusion/control.hpp`，固定 commit `6b3edaa` |
+| SDXL | 有示例（参考图输入） | 明确支持（含 Plus） | 明确支持 | `--ip-adapter-image`；`--control-image` | 1024 生成显存压力大，建议 `--vae-tiling` / `--offload-to-cpu` | `docs/ip_adapter.md`、`README.md`、`src/model/diffusion/control.hpp`，固定 commit `6b3edaa` |
+| Stable Diffusion 2.x | 未标注 | 未标注 | 仅代码可见 | 未在文档给出参考图生图示例 | `control.hpp` 有 SD2 分支，但 README/模型文档未示例；不得据此断定支持 | `src/model/diffusion/control.hpp`，固定 commit `6b3edaa` |
+| FLUX.2-dev / klein 4B / klein 9B | 有示例（参考图输入） | 未标注 | 未标注 | `sd-cli -r` | 文档示例从参考图生成编辑结果；未使用 `img2img` 一词，不据此否认能力 | `docs/flux2.md`，固定 commit `6b3edaa` |
+| FLUX.1-Kontext-dev、Qwen Image Edit | 有示例（参考图输入） | 未标注 | 未标注 | `sd-cli -r` + 编辑提示词 | 属于参考图编辑/生成能力，不是当前 IP-Adapter/ControlNet 组合 | `docs/kontext.md`、`docs/qwen_image_edit.md`，固定 commit `6b3edaa` |
+| 视频模型（vid_gen）、仅文生架构 | 未标注 | vid_gen 明确不支持 | vid_gen 明确不支持 | 未在对应 docs 中给出参考图生图示例 | `img_gen` 下仍可能可用，但当前文档未给出证据 | `examples/server/api.md`，固定 commit `6b3edaa` |
 
 ## 来源与核对
 
 契约核对自 stable-diffusion.cpp 的 `examples/server/api.md`（上游仓库 `ggml-org/stable-diffusion.cpp`；核对时使用过同名 fork 的 `master` 镜像，上游 master 的 raw 链接当时返回 404）。**改动前先确认上游文件位置**，字段或端点若已变化，以本文件与上游一致为准并同步更新。
 
-能力矩阵另按固定 commit `6b3edaaf32cc19e5bb2d819c788bd557eddc8eba` 核对 `docs/sd.md`、`docs/flux2.md`、`docs/kontext.md`、`docs/qwen_image_edit.md`。矩阵条目变化时必须同步更新依据列、版本/commit 与核对日期。判断标准是模型是否提供「从参考图生成结果图」的能力，不是上游文档是否出现 `img2img` 一词；上游 API 文档把 `image[]` 列为首选上传字段、`ref_images` 列为 `img_gen` 能力，但没有逐模型说明哪些模型采用这些图像，不能据此否认已展示的参考图生图能力。
+能力矩阵另按固定 commit `6b3edaaf32cc19e5bb2d819c788bd557eddc8eba` 核对 `README.md`、`docs/sd.md`、`docs/flux2.md`、`docs/kontext.md`、`docs/qwen_image_edit.md`、`docs/ip_adapter.md`、`src/model/diffusion/control.hpp` 与 `examples/server/api.md`。矩阵条目变化时必须同步更新依据列、版本/commit 与核对日期。判断标准是上游是否给出可核验的声明、示例或代码分支；参考图生图按「能否从参考图生成结果图」判定，IP-Adapter/ControlNet 按「上游是否声明或示例该模型族 + 技术名/flags」判定；本项目所指的这两项能力针对 SD1.5 等级的模型，其他模型族只按上游证据记录。

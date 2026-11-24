@@ -49,7 +49,7 @@ A request from the PoseWear page to `127.0.0.1` is cross-origin. CORS is declare
 
 On the site side the matching settings are the build-time CSP `connect-src` allowlist (already permitting `http://127.0.0.1:*` and `http://localhost:*`) and the local provider's forced direct connection with proxy off. Neither is user-configurable, and the site proxy rejects private addresses, so it cannot replace CORS. Diagnose the three "cannot connect" cases separately: CORS means local headers/preflight, mixed content means a protocol mismatch between the page and the local server, and CSP means the site allowlist.
 
-Reference images are always sent strictly; a model that supports reference-image-based generation will use them, while some models report an error or ignore the image. See the [model capability matrix in the sd.cpp API contract](docs/sdcpp-api.md).
+Reference images are always sent strictly; for SD1.5-class models, PoseWear uses IP-Adapter for appearance and ControlNet for pose; support depends on the selected model, and some models report an error or ignore the image. See the [model capability matrix in the sd.cpp API contract](docs/sdcpp-api.md).
 
 ## Changelog
 
